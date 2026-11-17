@@ -9,9 +9,10 @@ export function installYurifV2({auth,store}){
  const plans=collection(store,'experimentsV2');
  const refProgress=key=>doc(store,'experimentProgress',key);
  const refPresence=key=>doc(store,'participantPresenceV2',key);
+ const refConsent=key=>doc(store,'participantConsents',key);
  const refAnswers=key=>collection(store,'participantAnswersV2',key,'items');
  const refAnswer=(key,slot)=>doc(store,'participantAnswersV2',key,'items',slot);
- const state={list:[],selected:'',progress:null,answers:new Map(),offPlans:null,offProgress:null,offAnswers:null,
+ const state={list:[],selected:'',progress:null,consent:null,presence:null,answers:new Map(),offPlans:null,offProgress:null,offConsent:null,offPresence:null,offAnswers:null,
    participantKey:'',participantPlan:null,participantReady:false,participantProgress:null,participantAnswers:new Map(),
    offParticipantProgress:null,offParticipantAnswers:null,offParticipantPlan:null,transitioning:false,warning:''};
  const activePlan=()=>state.list.find(p=>p.id===state.selected);
@@ -38,9 +39,9 @@ export function installYurifV2({auth,store}){
   },e=>{state.warning='예정 실험 조회 불가: '+e.message;refreshRegistration();refreshLab()});
  }
  function deactivateResearch(){
-  state.offPlans?.();state.offPlans=null;state.offProgress?.();state.offProgress=null;state.offAnswers?.();state.offAnswers=null;
+  state.offPlans?.();state.offPlans=null;state.offProgress?.();state.offProgress=null;state.offConsent?.();state.offConsent=null;state.offPresence?.();state.offPresence=null;state.offAnswers?.();state.offAnswers=null;
   stopParticipant();
-  state.list=[];state.selected='';state.progress=null;state.answers.clear();
+  state.list=[];state.selected='';state.progress=null;state.consent=null;state.presence=null;state.answers.clear();
  }
  function choices(type){
   const a=envChoices().filter(x=>x.type===type);
@@ -138,9 +139,11 @@ export function installYurifV2({auth,store}){
  }
  function selectExperiment(id){
   if(state.selected===id)return;
-  state.offProgress?.();state.offAnswers?.();state.selected=id;state.progress=null;state.answers=new Map();
+  state.offProgress?.();state.offConsent?.();state.offPresence?.();state.offAnswers?.();state.selected=id;state.progress=null;state.consent=null;state.presence=null;state.answers=new Map();
   const plan=activePlan();
   if(plan){
+   state.offConsent=onSnapshot(refConsent(plan.accessKey),snap=>{state.consent=snap.exists()?snap.data():null;refreshLab()},e=>{state.warning='동의 기록 조회 오류: '+e.message;refreshLab()});
+   state.offPresence=onSnapshot(refPresence(plan.accessKey),snap=>{state.presence=snap.exists()?snap.data():null;refreshLab()},e=>{state.warning='참가자 준비 상태 조회 오류: '+e.message;refreshLab()});
    state.offProgress=onSnapshot(refProgress(plan.accessKey),snap=>{
     state.progress=snap.exists()?snap.data():null;refreshLab();
    },e=>{state.warning='실험 상태 조회 오류: '+e.message;refreshLab()});
@@ -182,7 +185,10 @@ export function installYurifV2({auth,store}){
   if(kind==='sensorError')action='<p role="alert">측정 중 센서 연결이 끊어졌습니다. 재연결 후 해당 구간을 재측정하거나 실험을 중단하세요. 이전 샘플은 삭제하지 않습니다.</p>'+btn('retry','센서 연결 후 해당 구간 재측정')+btn('abort','실험 중단 · 기록 보존');
   if(kind==='completed')action='<p>측정 기록 종료됨. 저장 상태와 세션 기록을 확인하세요.</p>';
   const last=(kind==='setup'||(kind==='survey'&&uploaded&&n<9))?'다음 환경: '+esc(plan.order[n+1]?.name||''):(kind==='restReady'?'지금 시작할 구간: '+esc(plan.order[n]?.name||'')+' 이후 30초 휴식':n>=0?'현재 환경: '+esc(plan.order[n]?.name||''):'초기 안정 상태');
-  return '<p><strong>진행 상태: '+esc(phaseLabel(p))+'</strong> · '+last+'</p>'+
+  const consentStatus=state.consent?.agreed===true?'서버 동의 확인됨':state.consent?.agreed===false?'연구 참여 비동의':'서버 동의 확인 전';
+  const readyStatus=state.presence?.ready===true?'참가자 실험 준비 완료':'참가자 준비 버튼 대기';
+  return '<p><strong>진행 상태: '+esc(phaseLabel(p))+'</strong> · '+last+'</p>'+ 
+   '<p class="muted">연구 참여 동의: <strong>'+esc(consentStatus)+'</strong> · 참가자 기기: <strong>'+esc(readyStatus)+'</strong></p>'+ 
    '<p class="muted">ADC 실시간 연결·구간 기록 상태와 Firebase 업로드 검증 결과를 각각 확인해야 합니다.</p>'+
    (state.warning?'<p role="alert" class="notice">'+esc(state.warning)+'</p>':'')+
    '<div class="actions">'+action+'</div>';
@@ -220,8 +226,9 @@ export function installYurifV2({auth,store}){
    await getDocFromServer(refAnswer(plan.accessKey,slot)).then(s=>{if(!s.exists())throw Error('설문 서버 확인 실패')});
   }
   if(kind==='baseline'){
-   const consent=await getDocFromServer(doc(store,'participantConsents',plan.accessKey));
-   if(!consent.exists()||consent.data().agreed!==true)throw Error('참가자의 사전 동의가 확인되지 않았습니다.');
+   const consent=await getDocFromServer(refConsent(plan.accessKey));
+   if(!consent.exists())throw Error('현재 선택한 '+plan.code+' 실험의 참가자 동의 기록이 서버에 없습니다. 참가자 기기에서 동일한 코드로 입장해 동의를 저장했는지 확인해 주세요.');
+   if(consent.data().agreed!==true)throw Error('현재 참가자의 연구 참여 동의가 확인되지 않았습니다.');
    const presence=await getDocFromServer(refPresence(plan.accessKey));
    if(!presence.exists()||presence.data().ready!==true||presence.data().uid!==consent.data().uid)
     throw Error('참가자 화면의 "실험 시작하기" 준비 완료가 확인되지 않았습니다.');
