@@ -27,11 +27,13 @@ function gsrLabPanel(){
  '<div class="gsr-live"><div><small>현재 ADC 원시값</small><strong id="gsr-current">—</strong><small>0~1023 · 전도도(µS) 아님</small></div><div><small>현재 실험 수집 샘플</small><strong id="gsr-count">0</strong><small>구간 시작 후 기록</small></div><div><small>USB 연결 상태</small><strong id="gsr-connection">대기</strong><small>기록은 현재 브라우저에 저장</small></div></div>'+
  '<div class="gsr-chart-box"><div class="gsr-chart-header"><div><h3>Arduino 실시간 ADC 그래프</h3><p class="muted">최근 120초 · 가로축 시간(초), 세로축 ADC(0~1023)</p></div><span class="pill" id="gsr-chart-segment">실험 대기</span></div><canvas id="gsr-live-chart" width="900" height="290" role="img" aria-label="Arduino GSR ADC의 최근 120초 실시간 선 그래프 및 실험 구간 경계"></canvas><div class="gsr-chart-legend"><span><i class="gsr-line-legend"></i>GSR ADC 원시값</span><span><i class="gsr-boundary-legend"></i>구간 변경 시점</span></div><p class="muted">그래프는 측정값을 보여주는 보조 화면이며, 실제 저장은 실험 시작 후 구간별로 이루어집니다.</p></div>'+ 
  '<div class="actions"><button type="button" class="btn" data-gsr-action="connect" '+(supported?'':'disabled')+'>USB 센서 연결</button><button type="button" class="btn secondary" data-gsr-action="disconnect">연결 해제</button></div>'+
- '<p class="muted" style="margin-top:10px">'+info+'</p><div class="notice">정식 실험 전에 센서를 착용하지 않은 상태와 착용한 상태의 원시 출력 및 결측값을 확인하세요. Arduino IDE 시리얼 모니터가 포트를 사용 중이라면 닫아야 합니다. 데이터는 GitHub에 업로드되지 않습니다.</div></section>';
+ '<p class="muted" style="margin-top:10px">'+info+'</p><div id="gsr-diagnostic" class="notice" role="status">USB 연결 버튼을 누른 뒤 표시되는 COM 포트를 선택하세요. Arduino IDE의 시리얼 모니터·플로터는 먼저 닫아야 합니다.</div><div class="notice">정식 실험 전에 센서를 착용하지 않은 상태와 착용한 상태의 원시 출력 및 결측값을 확인하세요. Arduino IDE 시리얼 모니터가 포트를 사용 중이라면 닫아야 합니다. 데이터는 GitHub에 업로드되지 않습니다.</div></section>';
 }
 function gsrRefresh(){
  const status=document.getElementById('gsr-status'),current=document.getElementById('gsr-current'),count=document.getElementById('gsr-count'),connection=document.getElementById('gsr-connection');
  if(status)status.textContent=gsrDevice.status;
+ const diagnostics=document.getElementById('gsr-diagnostic');
+ if(diagnostics)diagnostics.textContent=gsrDevice.error|| (gsrDevice.connected?(gsrDevice.received?'연결 및 ADC 수신 확인 · 최근 수신값 '+gsrDevice.last:'USB 포트 연결됨. ADC 수신 대기 중입니다. 스케치가 9600 baud로 0~1023 정수를 줄마다 출력하는지 확인하세요.'):'연결 순서: ① Arduino IDE 시리얼 모니터·플로터 닫기 ② USB 센서 연결 ③ Arduino COM 포트 선택');
  if(current)current.textContent=gsrDevice.last==null?'—':String(gsrDevice.last);
  if(count)count.textContent=String(gsrSamples(labDraft).length);
  if(connection)connection.textContent=gsrDevice.connected?'연결됨':'연결 안 됨';
@@ -149,11 +151,23 @@ async function gsrConnect(){
  let port;
  try{
   // Must run inside direct click activation, before any other await.
+  gsrDevice.error='';gsrDevice.status='USB 포트 선택 대기';gsrRefresh();
   port=await navigator.serial.requestPort();
+  gsrDevice.status='COM 포트 여는 중…';gsrRefresh();
   await port.open({baudRate:9600});
-  gsrDevice.port=port;gsrDevice.connected=true;gsrDevice.stopping=false;gsrDevice.status='USB 연결됨';gsrDevice.last=null;gsrDevice.received=0;gsrRefresh();
+  gsrDevice.port=port;gsrDevice.connected=true;gsrDevice.stopping=false;gsrDevice.status='USB 연결됨';gsrDevice.error='';gsrDevice.last=null;gsrDevice.received=0;gsrRefresh();
   gsrDevice.task=gsrReadLoop(port);
- }catch(e){gsrDevice.status=e?.name==='NotFoundError'?'포트 선택 취소':'연결 실패: '+String(e.message||e);gsrDevice.connected=false;gsrRefresh();if(port){try{await port.close()}catch{}}}
+ }catch(e){
+  const message=String(e?.message||e),name=String(e?.name||'');
+  const busy=/access denied|in use|already open|failed to open|cannot open|사용 중|액세스가 거부/i.test(message);
+  const hint=name==='NotFoundError'?'포트 선택이 취소되었습니다. USB 센서 연결을 다시 눌러 Arduino COM 포트를 선택하세요.':
+   name==='SecurityError'?'브라우저 권한 또는 정책 때문에 차단되었습니다. HTTPS Chrome/Edge에서 사이트의 시리얼 장치 권한을 확인하세요.':
+   busy?'COM 포트를 열 수 없습니다. Arduino IDE 시리얼 모니터·시리얼 플로터와 포트를 사용하는 다른 프로그램을 닫고 다시 연결하세요.':
+   'USB 케이블(데이터 지원)·장치 관리자 COM 포트·드라이버·Arduino IDE 스케치 및 포트 번호를 확인하세요.';
+  gsrDevice.error='연결 실패 ['+name+']: '+message+' · '+hint;
+  gsrDevice.status=name==='NotFoundError'?'포트 선택 취소':'USB 연결 실패';gsrDevice.connected=false;gsrRefresh();
+  if(port){try{await port.close()}catch{}}
+ }
 }
 async function gsrDisconnect(){
  gsrDevice.stopping=true;gsrDevice.status='연결 해제 중';gsrRefresh();
