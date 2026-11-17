@@ -774,9 +774,9 @@ function participantAdminHtml(){
  '<div class="field"><label>실험 단계</label><select name="stage" id="participant-plan-stage"><option value="stage1">1차 감각 환경 실험</option><option value="stage2">2차 대화 실험</option></select></div></div>'+
  '<div class="field"><label>참가자에게 적용할 감각 환경 순서 (1차 실험 · 한 줄에 하나씩)</label><textarea name="order" rows="5" placeholder="조도 300 lx · 4000 K&#10;조용한 교실&#10;바닐라 향" required></textarea></div>'+
  preBuilder()+
- '<div class="field"><label>쾌·불쾌 설문 문항</label><input name="valenceQuestion" maxlength="240" value="현재 느끼는 쾌·불쾌 정도 (1 매우 불쾌 ~ 9 매우 쾌적)"></div>'+
- '<div class="field"><label>각성 설문 문항</label><input name="arousalQuestion" maxlength="240" value="현재 각성 수준 (1 매우 낮음 ~ 9 매우 높음)"></div>'+
- '<div class="field"><label>대인 호감 설문 문항 (2차)</label><input name="likingQuestion" maxlength="240" value="대화 상대에 대한 호감 정도 (1 매우 낮음 ~ 9 매우 높음)"></div>'+
+
+
+
  '<button type="submit" class="btn" id="participant-plan-create">참가자 등록 · 입장 코드 발급</button></form></section>'+
  '<section class="panel"><div class="entry-head"><div><h2>참가자별 설문 및 생리 측정 결과</h2><p class="muted">설문과 같은 참가자 코드의 GSR 기록을 함께 확인합니다. 구간 매칭은 환경명·시각을 검토해야 합니다.</p></div><button type="button" class="btn secondary" id="participant-admin-refresh">목록 새로고침</button></div>'+
  '<div id="participant-admin-list">'+(participantState.adminPlans.length?participantState.adminPlans.map(p=>
