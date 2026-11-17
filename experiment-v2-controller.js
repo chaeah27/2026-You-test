@@ -188,6 +188,7 @@ export function installYurifV2({auth,store}){
    '<div class="actions">'+action+'</div>';
  }
  function refreshLab(){
+  window.yurifV2RefreshRegisteredPreview?.();
   const root=$('v2-lab-root');if(root){const select=$('v2-lab-select');if(select&&select.options.length!==state.list.length+1){
    root.outerHTML=labHtml();return;
   }const controls=$('v2-lab-current');if(controls)controls.innerHTML=labControls();}
