@@ -545,7 +545,7 @@ const firstStageGuide=[
  {tag:'h3',body:'5. 보상·문의'},
  {tag:'p',body:'연구 참여에 따른 보상 및 중도 중단 시 처리: [해당 사항 입력]'},
  {tag:'p',body:'연구책임자·지도교사 및 문의 연락처: [담당자와 공식 연락처 입력]'},
- {tag:'p',body:'연구의 구체적인 가설이나 조건별 예상 반응을 미리 알 필요는 없습니다. 다만 참여에 중요한 위험과 개인정보 처리에 관해서는 충분한 설명을 요청할 수 있습니다.'}
+ {tag:'p',body:'참가자는 연구 참여에 중요한 위험과 개인정보 처리에 대해 충분한 설명을 요청할 수 있습니다.'}
 ];
 const firstStageGuideHtml=firstStageGuide.map(x=>'<'+x.tag+'>'+safe(x.body)+'</'+x.tag+'>').join('');
 const firstStageQuestions=[
