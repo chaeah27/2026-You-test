@@ -1,6 +1,6 @@
 'use strict';
 const KEY='yurif_archive_v1';
-const defaults={journal:[],sessions:[],equipment:[],results:[],references:[],sensoryEnvironments:[],experimenters:[],pilotRuns:[],labRuns:[],journalBoard:[],dashboardNotes:[],protocolNotes:[]};
+const defaults={journal:[],sessions:[],equipment:[],results:[],references:[],sensoryEnvironments:[],experimenters:[],pilotRuns:[],labRuns:[],journalBoard:[],dashboardNotes:[],protocolNotes:[],surveyTemplates:[]};
 let db=load();let view='home';
 function load(){
  const readRaw=key=>{try{const x=JSON.parse(localStorage.getItem(key)||'null');return x&&typeof x==='object'?x:null}catch{return null}};
@@ -36,12 +36,38 @@ const sensoryTypes={visual:'시각',auditory:'청각',olfactory:'후각'};
 const sensoryLabel=k=>sensoryTypes[k]||'기타';
 function sensoryItems(type){return (Array.isArray(db.sensoryEnvironments)?db.sensoryEnvironments:[]).filter(x=>x.type===type)}
 function sensoryOptions(type){return '<option value="">환경을 선택하세요</option>'+sensoryItems(type).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('')}
+
+const surveyKinds={visual:'시각 4개 종료 후 한 번',olfactory:'각 후각 환경 종료 후',auditory:'각 청각 환경 종료 후'};
+const surveyDefault=(type)=>type==='visual'
+ ?{type,rankingQuestion:'경험한 네 조명을 가장 마음에 들었던 순서로 나열해 주세요.',discomfortQuestion:'불쾌감을 느낀 조명이 있다면 모두 선택해 주세요. 없으면 선택하지 않아도 됩니다.'}
+ :type==='olfactory'
+ ?{type,question:'해당 냄새를 맡았을 때 느낀 감정에 표시해 주세요.',options:['매우 나쁨','살짝 불쾌함','아무 변화 없음','좋음','매우 좋음']}
+ :{type,question:'',options:[]};
+function resolvedSurveyTemplate(type){
+ const saved=(db.surveyTemplates||[]).find(x=>x.type===type);
+ const def=surveyDefault(type);
+ return saved?{...def,...saved}:def;
+}
+window.yurifV2SurveyTemplates=()=>Object.fromEntries(Object.keys(surveyKinds).map(type=>[type,structuredClone(resolvedSurveyTemplate(type))]));
+function surveyEditor(type){
+ const item=resolvedSurveyTemplate(type),hint=surveyKinds[type];
+ const fields=type==='visual'
+  ?'<div class="field"><label>선호 순위 질문 (1~4순위, 중복 불가)</label><textarea name="rankingQuestion" required maxlength="400" rows="2">'+esc(item.rankingQuestion)+'</textarea></div>'+
+   '<div class="field"><label>불쾌한 조명 질문 (복수 선택 가능)</label><textarea name="discomfortQuestion" required maxlength="400" rows="2">'+esc(item.discomfortQuestion)+'</textarea></div>'+
+   '<p class="muted">선택지는 참가자에게 실제로 제시한 조명 4개의 이름으로 자동 구성됩니다.</p>'
+  :'<div class="field"><label>설문 문항'+(type==='auditory'?' (미확정이면 비워 두세요)':'')+'</label><textarea name="question" rows="2" maxlength="400" placeholder="직접 확정할 질문">'+esc(item.question||'')+'</textarea></div>'+
+   '<div class="field"><label>응답 선택지 5개 (한 줄에 하나씩)</label><textarea name="options" rows="6" placeholder="선택지 1&#10;선택지 2&#10;선택지 3&#10;선택지 4&#10;선택지 5">'+esc((item.options||[]).join('\n'))+'</textarea></div>';
+ return '<section class="sensory-survey-box"><h4>설문 설정</h4><p class="muted"><strong>자동 표시 시점:</strong> '+esc(hint)+'</p>'+
+ '<form data-form="sensorySurveyTemplate" data-survey-type="'+type+'"><input type="hidden" name="type" value="'+type+'">'+fields+
+ '<button class="btn secondary" type="submit">설문 설정 저장</button></form>'+
+ '<p class="muted">저장 후 새로 등록하는 1차 실험부터 적용됩니다. 진행 중이거나 이미 등록된 실험의 설문은 변경되지 않습니다.</p></section>';
+}
 function sensoryEditor(){
-  return '<section class="panel"><h2>감각 환경 직접 분류·관리</h2><p class="muted">시각·청각·후각 환경을 직접 등록하세요. 아래에 추가한 환경은 연구 일지의 ‘감각 환경’ 선택 목록에 자동으로 연결됩니다.</p><div class="cards">'+Object.entries(sensoryTypes).map(([type,label])=>
-    '<div class="card sensory-card"><span class="tag">'+label+'</span><h3>'+label+' 감각 환경</h3>'+
-    '<form data-form="sensoryEnvironments" class="sensory-form"><input type="hidden" name="type" value="'+type+'"><div class="field"><label>환경 이름</label><input name="name" maxlength="100" required placeholder="'+(type==='visual'?'예: 조도 300 lx · 4000 K':type==='auditory'?'예: 조용한 교실':'예: 향수 1번')+'"></div><div class="field"><label>구체적 조건 / 특성 (선택)</label><textarea name="memo" placeholder="변수, 측정값, 재현 방법 등을 기록하세요."></textarea></div><button class="btn" type="submit">＋ 환경 추가</button></form>'+
-    '<div class="sensory-list">'+(sensoryItems(type).length?sensoryItems(type).map(x=>
-      '<div class="entry"><div class="entry-head"><div><strong>'+esc(x.name)+'</strong><small style="display:block;white-space:pre-wrap">'+esc(x.memo||'')+'</small></div><button type="button" data-sensory-remove="'+esc(x.id)+'">삭제</button></div></div>').join(''):'<div class="empty">아직 등록된 환경이 없습니다.</div>')+'</div></div>').join('')+'</div><div class="notice">연구 환경과 일지 기록은 현재 브라우저에 저장됩니다. 같은 주소에 접속하더라도 다른 팀원 기기와 자동으로 공유되지는 않습니다. 정기적으로 JSON 백업을 내려받으세요.</div></section>';
+ return '<section class="panel"><h2>감각 환경 및 설문 관리</h2><p class="muted">감각 환경과 해당 분야의 설문을 함께 설정합니다. 시각은 네 환경을 모두 마친 뒤 1회, 후각·청각은 각 환경 후 설문이 자동 표시됩니다.</p><div class="cards">'+Object.entries(sensoryTypes).map(([type,label])=>
+  '<div class="card sensory-card"><span class="tag">'+label+'</span><h3>'+label+' 감각 환경</h3>'+
+  '<form data-form="sensoryEnvironments" class="sensory-form"><input type="hidden" name="type" value="'+type+'"><div class="field"><label>환경 이름</label><input name="name" maxlength="100" required placeholder="'+(type==='visual'?'예: 조도 300 lx · 4000 K':type==='auditory'?'예: 조용한 교실':'예: 향수 1번')+'"></div><div class="field"><label>구체적 조건 / 특성 (선택)</label><textarea name="memo" placeholder="변수, 측정값, 재현 방법 등을 기록하세요."></textarea></div><button class="btn" type="submit">＋ 환경 추가</button></form>'+
+  '<div class="sensory-list">'+(sensoryItems(type).length?sensoryItems(type).map(x=>
+   '<div class="entry"><div class="entry-head"><div><strong>'+esc(x.name)+'</strong><small style="display:block;white-space:pre-wrap">'+esc(x.memo||'')+'</small></div><button type="button" data-sensory-remove="'+esc(x.id)+'">삭제</button></div></div>').join(''):'<div class="empty">아직 등록된 환경이 없습니다.</div>')+'</div>'+surveyEditor(type)+'</div>').join('')+'</div></section>';
 }
 function journalSensoryFields(){
   return '<div class="formgrid"><div class="field"><label>감각 분야 (선택)</label><select name="sensoryType" id="journal-sensory-type"><option value="">일반 연구 기록</option>'+Object.entries(sensoryTypes).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></div><div class="field"><label>등록한 감각 환경</label><select name="sensoryId" id="journal-sensory-id" disabled><option value="">먼저 감각 분야를 선택하세요</option></select></div></div>';
@@ -729,7 +755,23 @@ async function recoverPilotCsv(){
 }
 function exportCSV(){let cols=['date','code','stage','condition','valence','arousal','hr','eda','lux','cct','liking','partner','memo'];const csv=[cols.join(','),...db.sessions.map(r=>cols.map(k=>'"'+String(r[k]??'').replaceAll('"','""')+'"').join(','))].join('\r\n');download('eureka-sessions-'+dateNow()+'.csv','\ufeff'+csv,'text/csv;charset=utf-8')}window.exportCSV=exportCSV;
 document.getElementById('nav').addEventListener('click',e=>{let b=e.target.closest('button[data-view]');if(b)route(b.dataset.view)});document.getElementById('exportQuick').addEventListener('click',exportJSON);
-document.getElementById('content').addEventListener('submit',e=>{const form=e.target.closest('form[data-form]');if(!form)return;e.preventDefault();const type=form.dataset.form;let vals=Object.fromEntries(new FormData(form));if(type==='labSessionImport'){labImportSubmit(vals);return}if(['dashboardNotes','protocolNotes'].includes(type)){
+document.getElementById('content').addEventListener('submit',e=>{const form=e.target.closest('form[data-form]');if(!form)return;e.preventDefault();const type=form.dataset.form;let vals=Object.fromEntries(new FormData(form));if(type==='labSessionImport'){labImportSubmit(vals);return}if(type==='sensorySurveyTemplate'){
+ const t=vals.type;if(!surveyKinds[t])return;
+ const def=surveyDefault(t);const item={id:'survey-'+t,type:t};
+ if(t==='visual'){
+  item.rankingQuestion=String(vals.rankingQuestion||'').trim().slice(0,400);
+  item.discomfortQuestion=String(vals.discomfortQuestion||'').trim().slice(0,400);
+  if(!item.rankingQuestion||!item.discomfortQuestion)return alert('시각 설문 질문 두 개를 모두 입력해 주세요.');
+ }else{
+  item.question=String(vals.question||'').trim().slice(0,400);
+  item.options=String(vals.options||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(t==='olfactory'||item.question||item.options.length){if(!item.question||item.options.length!==5)return alert('설문 문항과 선택지 5개를 모두 입력해 주세요.');}
+  if(item.options.some(x=>x.length>150)||new Set(item.options).size!==item.options.length)return alert('선택지는 서로 다르고 150자 이내여야 합니다.');
+ }
+ db.surveyTemplates??=[];
+ db.surveyTemplates=db.surveyTemplates.filter(x=>x.type!==t);db.surveyTemplates.push(item);
+ save();render();alert(sensoryLabel(t)+' 설문 설정을 저장했습니다. 새 1차 실험 등록에 적용됩니다.');return;
+ }if(['dashboardNotes','protocolNotes'].includes(type)){
  const id=String(vals.editId||''),item=id?db[type].find(x=>x.id===id):null;
  if(!vals.title?.trim()||!vals.memo?.trim())return;
  if(item){item.title=vals.title.trim();item.memo=vals.memo.trim();item.updatedAt=new Date().toISOString()}
