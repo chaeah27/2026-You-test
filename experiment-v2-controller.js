@@ -46,7 +46,7 @@ export function installYurifV2({auth,store}){
    '<div class="field"><label>실험 차수</label><select name="stage"><option value="stage1">1차 실험</option></select></div>'+
    '<div class="field"><label>예약 일시</label><input type="datetime-local" name="scheduledAt" required></div>'+
    '</div><div class="field"><label>특이사항</label><textarea name="notes" maxlength="2000"></textarea></div>'+
-   '<div class="field"><label>참가자 사전 안내서 및 동의 설명문</label><textarea name="consentText" rows="5" required placeholder="연구 목적, 절차, 자발적 참여 및 철회, 안전 유의사항, 기록 보존기간 등을 직접 작성"></textarea></div>'+
+   (window.yurifPreBuilder?.()||'<div class="field"><label>사전 안내서</label><textarea name="consentText" required></textarea></div>')+
    '<div class="field"><label>청각 설문 문항 (미확정이면 비워 두기)</label><input name="audioQuestion" maxlength="300" placeholder="직접 확정할 질문"></div>'+ 
    '<div class="field"><label>청각 응답 선택지 5개 (한 줄에 하나씩)</label><textarea name="audioOptions" rows="5"></textarea></div></section>'+
    selections+
@@ -90,9 +90,10 @@ export function installYurifV2({auth,store}){
   if(state.list.some(x=>x.code===code&&x.stage==='stage1'&&x.active!==false))
    throw Error('이미 활성 상태인 같은 참가자 코드·실험 차수가 있습니다.');
   const id=crypto.randomUUID(),key=randomHex(16);
+  const info=window.yurifPreRead?.()||{consentText:String(data.consentText||'').trim(),consentHtml:'',preQuestions:[],infoVersion:'legacy'};
   const plan={code,researcherCode:String(data.researcherCode).trim(),stage:'stage1',
    scheduledAt:data.scheduledAt,notes:String(data.notes||''),order,accessKey:key,
-   consentText:String(data.consentText||'').trim(),audioQuestion:String(data.audioQuestion||'').trim(),
+   consentText:info.consentText,consentHtml:info.consentHtml,preQuestions:info.preQuestions,infoVersion:info.infoVersion,audioQuestion:String(data.audioQuestion||'').trim(),
    audioOptions:String(data.audioOptions||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean),
    active:true,createdAt:serverTimestamp()};
   if(!plan.consentText)throw Error('사전 안내서가 필요합니다.');
@@ -100,7 +101,7 @@ export function installYurifV2({auth,store}){
   const batch=writeBatch(store);
   batch.set(doc(plans,id),plan);
   batch.set(doc(store,'participantAccess',key),{code,experimentId:id,v2:true,stage:'stage1',
-   order:order.map(x=>x.name),active:true,consentText:plan.consentText,audioQuestion:plan.audioQuestion,audioOptions:plan.audioOptions,createdAt:serverTimestamp()});
+   order:order.map(x=>x.name),active:true,consentText:plan.consentText,consentHtml:plan.consentHtml,preQuestions:plan.preQuestions,infoVersion:plan.infoVersion,audioQuestion:plan.audioQuestion,audioOptions:plan.audioOptions,createdAt:serverTimestamp()});
   batch.set(refProgress(key),{experimentId:id,code,phase:'registered',position:-1,
    startedAt:null,endedAt:null,updatedAt:serverTimestamp()});
   await batch.commit();
