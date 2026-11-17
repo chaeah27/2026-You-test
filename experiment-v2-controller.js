@@ -342,7 +342,7 @@ export function installYurifV2({auth,store}){
  document.addEventListener('click',async e=>{
   const copy=e.target.closest('[data-v2-copy]');
   if(copy){const p=state.list.find(x=>x.id===copy.dataset.v2Copy);if(p){
-   const value='참가자 코드: '+p.code+'\\n임시 비밀번호: '+p.accessKey;
+   const value='참가자 코드: '+p.code+'\n임시 비밀번호: '+p.accessKey;
    try{await navigator.clipboard.writeText(value);alert('참가자 입장 정보 복사 완료')}catch{alert(value)}
   }return}
   if(e.target.id==='v2-csv-export'){csvExport();return}
