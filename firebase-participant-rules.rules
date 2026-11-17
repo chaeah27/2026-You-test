@@ -1,0 +1,191 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function isMember(){
+   return request.auth != null
+    && exists(/databases/$(database)/documents/members/$(request.auth.uid))
+    && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.active == true
+    && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role in ['admin','researcher'];
+  }
+  function isAdmin(){
+   return isMember()
+    && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.role == 'admin';
+  }
+  function hasAccessKey(token){
+   return request.auth != null
+    && exists(/databases/$(database)/documents/participantAccess/$(token))
+    && get(/databases/$(database)/documents/participantAccess/$(token)).data.active == true;
+  }
+  function ownsConsent(token){
+   return hasAccessKey(token)
+    && exists(/databases/$(database)/documents/participantConsents/$(token))
+    && get(/databases/$(database)/documents/participantConsents/$(token)).data.uid == request.auth.uid;
+  }
+  function agreed(token){
+   return ownsConsent(token)
+    && get(/databases/$(database)/documents/participantConsents/$(token)).data.agreed == true;
+  }
+  match /members/{userId}{
+   allow get: if request.auth != null && (request.auth.uid == userId || isAdmin());
+   allow list, create, update, delete: if isAdmin();
+  }
+  match /teamData/{document=**}{
+   allow read, write: if isMember();
+  }
+  match /publicContent/{document=**}{
+   allow read: if true;
+   allow write: if isAdmin();
+  }
+  // Plans have 128-bit random access keys. Participants may get the EXACT
+  // document only when they know the key; listing all plans is forbidden.
+  match /participantAccess/{token}{
+   allow get: if request.auth != null;
+   allow list: if isMember();
+   allow create: if isMember();
+   allow update: if isAdmin() || (isMember()
+    && resource.data.v2 == true
+    && request.resource.data.v2 == true
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['audioQuestion','audioOptions','code'])
+    && request.resource.data.experimentId == resource.data.experimentId
+    && request.resource.data.order == resource.data.order);
+   allow delete: if false;
+  }
+  match /participantConsents/{token}{
+   // Allow a read of a missing consent before the initial answer.
+   allow get: if isMember() || (
+    hasAccessKey(token)
+    && (!exists(/databases/$(database)/documents/participantConsents/$(token))
+        || resource.data.uid == request.auth.uid)
+   );
+   allow list: if isMember();
+   allow create: if hasAccessKey(token)
+    && !isMember()
+    && request.resource.data.keys().hasOnly(['uid','agreed','createdAt'])
+    && request.resource.data.uid == request.auth.uid
+    && request.resource.data.agreed is bool
+    && request.resource.data.createdAt == request.time;
+   allow update, delete: if false;
+  }
+  match /participantAnswers/{token}/items/{slot}{
+   allow get: if isMember() || ownsConsent(token);
+   allow list: if isMember() || ownsConsent(token);
+   allow create: if agreed(token)
+    && !isMember()
+    && request.resource.data.keys().hasOnly(['uid','slot','environment','index','stage','finishedConfirmed','valence','arousal','liking','note','createdAt'])
+    && request.resource.data.uid == request.auth.uid
+    && request.resource.data.finishedConfirmed == true
+    && request.resource.data.slot == slot
+    && request.resource.data.stage == get(/databases/$(database)/documents/participantAccess/$(token)).data.stage
+    && request.resource.data.environment is string
+    && request.resource.data.environment.size() <= 120
+    && request.resource.data.note is string
+    && request.resource.data.note.size() <= 1000
+    && request.resource.data.index is int
+    && request.resource.data.valence is int
+    && request.resource.data.valence >= 1 && request.resource.data.valence <= 9
+    && request.resource.data.arousal is int
+    && request.resource.data.arousal >= 1 && request.resource.data.arousal <= 9
+    && (request.resource.data.liking == '' || (request.resource.data.liking is int
+      && request.resource.data.liking >= 1 && request.resource.data.liking <= 9))
+    && request.resource.data.createdAt == request.time
+    && (
+     (request.resource.data.stage == 'stage2' && slot == 'final' && request.resource.data.index == 0 && request.resource.data.environment == '대화 종료 후')
+     ||
+     (request.resource.data.stage == 'stage1' && slot.matches('s[0-9]+')
+      && request.resource.data.index >= 0
+      && request.resource.data.index < get(/databases/$(database)/documents/participantAccess/$(token)).data.order.size()
+      && request.resource.data.environment == get(/databases/$(database)/documents/participantAccess/$(token)).data.order[request.resource.data.index])
+    );
+   allow update, delete: if false;
+  }
+  // V2 experimental registrations are available only to approved researchers.
+  match /experimentsV2/{experimentId}{
+   allow get, list: if isMember();
+   allow create: if isMember()
+    && request.resource.data.stage == 'stage1'
+    && request.resource.data.order is list
+    && request.resource.data.order.size() == 10;
+   // Ordering and experiment identity are permanent once registered.
+   allow update: if isMember()
+    && request.resource.data.order == resource.data.order
+    && request.resource.data.accessKey == resource.data.accessKey
+    && request.resource.data.stage == resource.data.stage;
+   allow delete: if false;
+  }
+  match /experimentsV2/{experimentId}/heartRate/{segmentId}{
+   allow get, list, create, update: if isMember();
+   allow delete: if false;
+  }
+  match /experimentsV2/{experimentId}/audit/{auditId}{
+   allow get, list, create: if isMember();
+   allow update, delete: if false;
+  }
+  match /experimentProgress/{token}{
+   allow get: if isMember() || agreed(token);
+   allow list: if isMember();
+   allow create: if isMember();
+   allow update: if isMember()
+    && request.resource.data.experimentId == resource.data.experimentId
+    && request.resource.data.phase in ['registered','measurement','restReady','rest','setup','survey','completed','aborted','sensorError'];
+   allow delete: if false;
+  }
+  // Each survey answer is immutable; the participant may submit only
+  // while the researcher has unlocked this exact survey slot.
+  match /participantPresenceV2/{token}{
+   allow get: if isMember() || agreed(token);
+   allow list: if isMember();
+   allow create: if agreed(token)
+    && !isMember()
+    && request.resource.data.keys().hasOnly(['uid','ready','readyAt'])
+    && request.resource.data.uid == request.auth.uid
+    && request.resource.data.ready == true
+    && request.resource.data.readyAt == request.time;
+   allow update: if agreed(token)
+    && !isMember()
+    && resource.data.uid == request.auth.uid
+    && request.resource.data.uid == resource.data.uid
+    && request.resource.data.ready == true
+    && request.resource.data.keys().hasOnly(['uid','ready','readyAt']);
+   allow delete: if false;
+  }
+  match /participantAnswersV2/{token}/items/{slot}{
+   allow get, list: if isMember() || agreed(token);
+   allow create: if agreed(token)
+    && !isMember()
+    && exists(/databases/$(database)/documents/experimentProgress/$(token))
+    && get(/databases/$(database)/documents/experimentProgress/$(token)).data.phase == 'survey'
+    && get(/databases/$(database)/documents/experimentProgress/$(token)).data.surveySlot == slot
+    && request.resource.data.keys().hasOnly(['uid','slot','position','stage','ranking','discomfort','rating','createdAt'])
+    && request.resource.data.uid == request.auth.uid
+    && request.resource.data.createdAt == request.time
+    && request.resource.data.slot == slot
+    && request.resource.data.stage == 'stage1'
+    && request.resource.data.position is int
+    && request.resource.data.position == get(/databases/$(database)/documents/experimentProgress/$(token)).data.position
+    && (
+      (slot == 'visual'
+       && request.resource.data.position == 3
+       && request.resource.data.ranking is list
+       && request.resource.data.ranking.size() == 4
+       && request.resource.data.discomfort is list
+       && request.resource.data.discomfort.size() <= 4)
+      ||
+      (slot.matches('olfactory-[0-3]')
+       && request.resource.data.position >= 4
+       && request.resource.data.position <= 7
+       && request.resource.data.rating is int
+       && request.resource.data.rating >= 1
+       && request.resource.data.rating <= 5)
+      ||
+      (slot.matches('auditory-[0-1]')
+       && request.resource.data.position >= 8
+       && request.resource.data.position <= 9
+       && request.resource.data.rating is int
+       && request.resource.data.rating >= 1
+       && request.resource.data.rating <= 5)
+    );
+   allow update, delete: if false;
+  }
+  match /{document=**}{allow read, write: if false;}
+ }
+}
