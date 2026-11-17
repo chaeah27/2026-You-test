@@ -1,4 +1,4 @@
-import {installYurifV2} from './experiment-v2-controller.js?v=experiment-link-fix-20261117';
+import {installYurifV2} from './experiment-v2-controller.js?v=lab-autofill-20261117';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signInAnonymously,signOut} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocs,onSnapshot,writeBatch,setDoc,serverTimestamp,query,where} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
@@ -111,7 +111,7 @@ onAuthStateChanged(auth,async user=>{
 
 async function loadWorkspace(){
  if(window.yurifCloudGetData){for(const type of types)window.yurifCloudApply(type,window.yurifCloud.initialData[type]||[]);return;}
- for(const src of ['adc-safety-journal-v2.js?v=eureka-name-fix','app-cloud-ready-20261113.js?v=merged-registration-20261117','gsr-live-chart-20261113.js?v=eureka-name-fix']){
+ for(const src of ['adc-safety-journal-v2.js?v=eureka-name-fix','app-cloud-ready-20261113.js?v=lab-autofill-20261117','gsr-live-chart-20261113.js?v=eureka-name-fix']){
   await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(new Error(src+' 파일을 불러오지 못했습니다'));document.body.append(s)});
  }
 }
