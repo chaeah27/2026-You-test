@@ -1,7 +1,7 @@
 import {installYurifV2} from './experiment-v2-controller.js?v=lab-autofill-20261117';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signInAnonymously,signOut} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
-import {getFirestore,collection,doc,getDoc,getDocs,onSnapshot,writeBatch,setDoc,serverTimestamp,query,where} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
+import {getFirestore,collection,doc,getDoc,getDocFromServer,getDocs,onSnapshot,writeBatch,setDoc,serverTimestamp,query,where} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 
 const firebaseConfig = {
  apiKey:"AIzaSyDvznaucP4wjG70pqo_lJLMfs4OPM1PUsE",
@@ -722,9 +722,9 @@ async function recordParticipantConsent(agreed){
  buttons.forEach(b=>b.disabled=true);
  try{
   await setDoc(participantConsentRef(participantState.key),data);
-  const stored=await getDoc(participantConsentRef(participantState.key));
-  if(!stored.exists()||stored.data().agreed!==agreed)throw Error('동의 기록 확인 실패');
-  participantState.consent=stored.data();portalMsg(agreed?'동의 응답 저장 확인 완료':'비동의 응답 저장 확인 완료');
+  const stored=await getDocFromServer(participantConsentRef(participantState.key));
+  if(!stored.exists()||stored.data().agreed!==agreed||stored.data().uid!==auth.currentUser.uid)throw Error('Firebase 서버 동의 기록 확인 실패');
+  participantState.consent=stored.data();portalMsg(agreed?'선택한 실험의 연구 참여 동의가 Firebase 서버에 저장되었습니다. 이제 ‘실험 시작하기’를 눌러 연구원에게 준비 완료를 알려 주세요.':'비동의 기록이 Firebase 서버에 저장되었습니다.');
   renderParticipantSteps();
  }catch(e){portalMsg('동의 기록 저장 실패: '+friendly(e)+' · 저장 확인 전에는 다음 단계로 진행할 수 없습니다.');buttons.forEach(b=>b.disabled=false)}
 }
