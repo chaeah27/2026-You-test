@@ -43,14 +43,18 @@ export function installYurifV2({auth,store}){
   stopParticipant();
   state.list=[];state.selected='';state.progress=null;state.consent=null;state.presence=null;state.answers.clear();
  }
- function choices(type){
+ function choices(type,position){
   const a=envChoices().filter(x=>x.type===type);
-  return a.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('');
+  const prefix=({visual:'L',olfactory:'F',auditory:'S'})[type];
+  const target=prefix+String(position+1).padStart(2,'0');
+  const matched=a.find(x=>[x.name,x.code,x.id].some(value=>String(value??'').trim().toUpperCase()===target));
+  return (matched?'':'<option value="" selected>해당 환경('+target+')을 찾지 못했습니다 · 직접 선택</option>')+
+   a.map(x=>'<option value="'+esc(x.id)+'" '+(matched&&x.id===matched.id?'selected':'')+'>'+esc(x.name)+'</option>').join('');
  }
  function registrationHtml(){
   const types=[['visual','시각',4],['olfactory','후각',4],['auditory','청각',2]];
   const selections=types.map(([type,title,count])=>'<section class="panel"><h3>'+title+' · '+count+'개 선택</h3><p class="muted">해당 분야 내 순서만 등록 시 무작위로 섞고 확정합니다.</p>'+
-   '<div class="formgrid">'+Array.from({length:count},(_,i)=>'<div class="field"><label>'+title+' '+(i+1)+'</label><select required name="'+type+i+'">'+choices(type)+'</select></div>').join('')+'</div></section>').join('');
+   '<div class="formgrid">'+Array.from({length:count},(_,i)=>'<div class="field"><label>'+title+' '+(i+1)+'</label><select required name="'+type+i+'">'+choices(type,i)+'</select></div>').join('')+'</div></section>').join('');
   return '<h1>실험 등록 <span class="pill">1차 연구 · 개발 버전</span></h1>'+
    '<p class="lead">실험 설계에서 등록한 시각 4개·후각 4개·청각 2개의 환경을 선택하세요. 등록 시 셔플된 제시 순서는 고정됩니다.</p>'+
    '<form id="v2-registration-form"><section class="panel"><div class="formgrid">'+
