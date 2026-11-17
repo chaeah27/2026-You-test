@@ -88,6 +88,7 @@ onAuthStateChanged(auth,async user=>{
   }));
   window.yurifCloud.initialData=loaded;window.yurifCloud.ready=true;state.ready=true;window.yurifCloud.status='공동 데이터 연결됨';
   await loadWorkspace();
+  window.yurifV2?.activateResearch();
   show('workspace');
   activateGsrSharing();
   $('cloud-status').textContent='공동 데이터 연결됨';
@@ -488,14 +489,19 @@ $('participant-exit').addEventListener('click',async()=>{
 $('participant-entry-form').addEventListener('submit',async e=>{
  e.preventDefault();
  if(!auth.currentUser?.isAnonymous)return portalMsg('참가자 인증이 필요합니다. 연구원 계정과 별도의 브라우저에서 접속해 주세요.');
- const key=$('participant-access-code').value.trim().toLowerCase().replaceAll('-','');
- const code=$('participant-code')?.value.trim()||'';
- if(!/^[0-9a-f]{32}$/.test(key))return portalMsg('연구원에게 받은 32자리 입장 코드를 정확히 입력해 주세요.');
+ const pasted=String($('participant-access-code').value||'').trim();
+ const embeddedKey=pasted.match(/(?:임시\\s*비밀번호|입장\\s*코드)\\s*[:：]\\s*([0-9a-f]{32})/i);
+ const embeddedCode=pasted.match(/참가자\\s*코드\\s*[:：]\\s*([^\\s\\\\]+)/i);
+ const key=(embeddedKey?.[1]||pasted).trim().toLowerCase().replaceAll('-','');
+ let code=$('participant-code')?.value.trim()||'';
+ if(!code&&embeddedCode){code=embeddedCode[1];$('participant-code').value=code}
+ if(!/^[0-9a-f]{32}$/.test(key))return portalMsg('임시 비밀번호는 32자리 영문·숫자 코드입니다. 복사한 안내문 전체가 아니라 임시 비밀번호만 붙여 넣거나, 안내문을 그대로 넣어도 자동 인식합니다.');
+ if(!code)return portalMsg('참가자 코드(P01 등)도 위 칸에 입력해 주세요.');
  const btn=$('participant-enter-btn');btn.disabled=true;portalMsg('참가 정보를 확인하는 중…');
  try{
   const snap=await getDoc(participantPlanRef(key));
   if(!snap.exists()||snap.data().active!==true)throw Error('활성화된 참가 코드가 아닙니다.');
-  if(snap.data().v2&&code!==snap.data().code)throw Error('참가자 코드와 임시 비밀번호가 일치하지 않습니다.');
+  if(snap.data().v2&&code!==snap.data().code)throw Error('참가자 코드가 등록 정보와 일치하지 않습니다. 실험 등록 화면의 참가자 코드를 확인해 주세요.');
   participantState.key=key;participantState.plan=snap.data();participantState.preStep=1;participantState.preDraft=null;participantState.preRead=false;
   const consentSnap=await getDoc(participantConsentRef(key));
   participantState.consent=consentSnap.exists()?consentSnap.data():null;
