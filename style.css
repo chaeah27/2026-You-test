@@ -371,3 +371,14 @@ input:focus,textarea:focus,select:focus{outline-color:#D9EAF6;border-color:#79B6
 .pre-admin-answers{margin:12px 0;padding:14px;background:#f4f7fb;border-radius:10px}
 .participant-consent-copy p{margin:0 0 10px}
 .participant-consent-copy ul,.participant-consent-copy ol{padding-left:24px}
+
+/* Three-stage participant pre-experiment wizard */
+.pre-steps-progress{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:16px 0 20px}
+.pre-steps-progress span{padding:9px 6px;text-align:center;border:1px solid #d8e3ef;border-radius:9px;background:#f5f8fc;color:#51647b;font-weight:600;font-size:13px}
+.pre-steps-progress span.current{border-color:#327cb3;background:#eaf4ff;color:#155786}
+.yurif-participant-area #pre-response{display:block}
+.yurif-participant-area #pre-response .field{margin:18px 0}
+.yurif-participant-area #pre-response select{width:100%;max-width:100%}
+.yurif-participant-area .participant-consent-copy{max-height:none;overflow:visible}
+.yurif-participant-area .actions{flex-wrap:wrap;gap:10px}
+@media(max-width:540px){.pre-steps-progress span{font-size:11px;padding:8px 2px}.yurif-participant-area .actions .btn{flex:1 1 auto}}
