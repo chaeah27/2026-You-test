@@ -382,3 +382,10 @@ input:focus,textarea:focus,select:focus{outline-color:#D9EAF6;border-color:#79B6
 .yurif-participant-area .participant-consent-copy{max-height:none;overflow:visible}
 .yurif-participant-area .actions{flex-wrap:wrap;gap:10px}
 @media(max-width:540px){.pre-steps-progress span{font-size:11px;padding:8px 2px}.yurif-participant-area .actions .btn{flex:1 1 auto}}
+
+/* Protocol sensory environment and editable survey settings */
+.sensory-card .sensory-survey-box{margin-top:18px;padding-top:16px;border-top:1px solid #dbe5ef}
+.sensory-survey-box h4{font-size:16px;margin:0 0 7px;color:#203f60}
+.sensory-survey-box .field{margin:12px 0}
+.sensory-survey-box textarea{box-sizing:border-box;width:100%;max-width:100%;min-height:65px}
+.sensory-survey-box .btn{max-width:100%}
