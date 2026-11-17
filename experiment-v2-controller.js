@@ -16,6 +16,14 @@ export function installYurifV2({auth,store}){
    offParticipantProgress:null,offParticipantAnswers:null,offParticipantPlan:null,transitioning:false,warning:''};
  const activePlan=()=>state.list.find(p=>p.id===state.selected);
  const envChoices=()=>window.yurifV2EnvironmentList?.()||[];
+ const defaultsSurvey=()=>({visual:{rankingQuestion:'경험한 네 조명을 가장 마음에 들었던 순서로 나열해 주세요.',discomfortQuestion:'불쾌감을 느낀 조명이 있다면 모두 선택해 주세요. 없으면 선택하지 않아도 됩니다.'},olfactory:{question:'해당 냄새를 맡았을 때 느낀 감정에 표시해 주세요.',options:['매우 나쁨','살짝 불쾌함','아무 변화 없음','좋음','매우 좋음']},auditory:{question:'',options:[]}});
+ function planSurvey(plan,type){
+  const defaults=defaultsSurvey()[type];
+  if(type==='auditory'&&!plan?.surveyTemplates?.auditory)return {question:plan?.audioQuestion||'',options:plan?.audioOptions||[]};
+  return {...defaults,...(plan?.surveyTemplates?.[type]||{})};
+ }
+ function audioReady(plan){const q=planSurvey(plan,'auditory');return !!q.question&&Array.isArray(q.options)&&q.options.length===5}
+
  function activateResearch(){
   if(state.offPlans)return;
   state.offPlans=onSnapshot(plans,s=>{
@@ -47,8 +55,7 @@ export function installYurifV2({auth,store}){
    '<div class="field"><label>예약 일시</label><input type="datetime-local" name="scheduledAt" required></div>'+
    '</div><div class="field"><label>특이사항</label><textarea name="notes" maxlength="2000"></textarea></div>'+
    (window.yurifPreBuilder?.()||'<div class="field"><label>사전 안내서</label><textarea name="consentText" required></textarea></div>')+
-   '<div class="field"><label>청각 설문 문항 (미확정이면 비워 두기)</label><input name="audioQuestion" maxlength="300" placeholder="직접 확정할 질문"></div>'+ 
-   '<div class="field"><label>청각 응답 선택지 5개 (한 줄에 하나씩)</label><textarea name="audioOptions" rows="5"></textarea></div></section>'+
+   '<p class="muted">시각·후각·청각 설문은 <strong>실험 설계·프로토콜 → 감각 환경 및 설문 관리</strong>에서 입력·수정합니다. 실험 등록 시 설문 내용이 참가자별로 고정 저장됩니다.</p></section>'+
    selections+
    '<section class="panel"><button class="btn" type="submit">환경 순서 셔플·확정하고 실험 등록</button><p class="muted">임시 비밀번호로 32자리 무작위 입장키를 발급합니다. 입장키는 별도 보관하고 승인된 연구원만 접근하도록 합니다.</p></section></form>'+
    '<section class="panel"><h2>예정된 실험</h2><div id="v2-registration-list">'+registrationRows()+'</div><button type="button" class="btn secondary" id="v2-csv-export">예정 실험 CSV 다운로드</button></section>';
@@ -91,17 +98,22 @@ export function installYurifV2({auth,store}){
    throw Error('이미 활성 상태인 같은 참가자 코드·실험 차수가 있습니다.');
   const id=crypto.randomUUID(),key=randomHex(16);
   const info=window.yurifPreRead?.()||{consentText:String(data.consentText||'').trim(),consentHtml:'',preQuestions:[],infoVersion:'legacy'};
+  const surveyTemplates=structuredClone(window.yurifV2SurveyTemplates?.()||defaultsSurvey());
+  if(!surveyTemplates.visual?.rankingQuestion||!surveyTemplates.visual?.discomfortQuestion)throw Error('프로토콜에서 시각 설문을 확인해 주세요.');
+  if(!surveyTemplates.olfactory?.question||surveyTemplates.olfactory?.options?.length!==5)throw Error('프로토콜에서 후각 설문을 확인해 주세요.');
+  const audio=surveyTemplates.auditory||{question:'',options:[]};
+  if((audio.question||audio.options?.length)&&(!audio.question||audio.options?.length!==5))throw Error('청각 설문 문항과 응답 선택지 5개를 모두 작성하거나 둘 다 비워 주세요.');
   const plan={code,researcherCode:String(data.researcherCode).trim(),stage:'stage1',
    scheduledAt:data.scheduledAt,notes:String(data.notes||''),order,accessKey:key,
-   consentText:info.consentText,consentHtml:info.consentHtml,preQuestions:info.preQuestions,infoVersion:info.infoVersion,audioQuestion:String(data.audioQuestion||'').trim(),
-   audioOptions:String(data.audioOptions||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean),
+   consentText:info.consentText,consentHtml:info.consentHtml,preQuestions:info.preQuestions,infoVersion:info.infoVersion,surveyTemplates,audioQuestion:audio.question||'',
+   audioOptions:audio.options||[],
    active:true,createdAt:serverTimestamp()};
   if(!plan.consentText)throw Error('사전 안내서가 필요합니다.');
   if((plan.audioQuestion||plan.audioOptions.length)&&(!plan.audioQuestion||plan.audioOptions.length!==5))throw Error('청각 설문 문항과 선택지 5개를 모두 입력하거나 둘 다 비워 두세요.');
   const batch=writeBatch(store);
   batch.set(doc(plans,id),plan);
   batch.set(doc(store,'participantAccess',key),{code,experimentId:id,v2:true,stage:'stage1',
-   order:order.map(x=>x.name),active:true,consentText:plan.consentText,consentHtml:plan.consentHtml,preQuestions:plan.preQuestions,infoVersion:plan.infoVersion,audioQuestion:plan.audioQuestion,audioOptions:plan.audioOptions,createdAt:serverTimestamp()});
+   order:order.map(x=>x.name),active:true,consentText:plan.consentText,consentHtml:plan.consentHtml,preQuestions:plan.preQuestions,infoVersion:plan.infoVersion,surveyTemplates:plan.surveyTemplates,audioQuestion:plan.audioQuestion,audioOptions:plan.audioOptions,createdAt:serverTimestamp()});
   batch.set(refProgress(key),{experimentId:id,code,phase:'registered',position:-1,
    startedAt:null,endedAt:null,updatedAt:serverTimestamp()});
   await batch.commit();
@@ -210,7 +222,7 @@ export function installYurifV2({auth,store}){
     throw Error('참가자 화면의 "실험 시작하기" 준비 완료가 확인되지 않았습니다.');
    await window.yurifV2PrepareLab?.(plan,P().makeSegments(plan.order));
   }
-  if(kind==='stimulus'&&(!plan.audioQuestion||plan.audioOptions?.length!==5)&&nextPos>=8)throw Error('청각 설문 문항이 미확정입니다. 실험 설계에서 먼저 등록해야 합니다.');
+  if(kind==='stimulus'&&!audioReady(plan)&&nextPos>=8)throw Error('청각 설문 문항이 미확정입니다. 실험 설계에서 먼저 등록해야 합니다.');
   const segment=kind==='baseline'?0:kind==='stimulus'?1+2*nextPos:2+2*nextPos;
   // Obtain server authorization first. Do not backdate measurement to network-request time.
   await transition(kind==='rest'?'rest':'measurement',expected,{position:nextPos,segment,startedAt:null,endedAt:null});
@@ -382,20 +394,23 @@ export function installYurifV2({auth,store}){
   const open='<section class="panel"><h2>감각 환경 평가</h2><form id="v2-survey-form"><input type="hidden" name="slot" value="'+esc(slot)+'">';
   let body='';
   if(slot==='visual'){
-   body='<p>경험한 네 조명을 가장 마음에 들었던 순서로 나열해 주세요.</p>'+
+   const survey=planSurvey(plan,'visual');
+   body='<p>'+esc(survey.rankingQuestion)+'</p>'+
     Array.from({length:4},(_,i)=>'<div class="field"><label>'+(i+1)+'순위</label><select required name="rank'+i+'"><option value="">선택</option>'+
      plan.order.slice(0,4).map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('')+'</select></div>').join('')+
-    '<p>불쾌감을 느낀 조명이 있다면 모두 선택해 주세요. 없으면 선택하지 않아도 됩니다.</p>'+
+    '<p>'+esc(survey.discomfortQuestion)+'</p>'+
     plan.order.slice(0,4).map(x=>'<label class="participant-confirm"><input type="checkbox" name="discomfort" value="'+esc(x)+'"> '+esc(x)+'</label>').join('');
   }else if(slot.startsWith('olfactory')){
-   body='<p>해당 냄새를 맡았을 때 느낀 감정에 표시해 주세요.</p>'+
-    ['매우 나쁨','살짝 불쾌함','아무 변화 없음','좋음','매우 좋음'].map((t,i)=>'<label class="participant-confirm"><input type="radio" required name="rating" value="'+(i+1)+'"> '+t+'</label>').join('');
+   const survey=planSurvey(plan,'olfactory');
+   body='<p>'+esc(survey.question)+'</p>'+
+    survey.options.map((t,i)=>'<label class="participant-confirm"><input type="radio" required name="rating" value="'+(i+1)+'"> '+t+'</label>').join('');
   }else{
-   body='<p>'+esc(plan.audioQuestion||'청각 설문 문항이 아직 확정되지 않았습니다. 연구원에게 문의해 주세요.')+'</p>'+
-    (plan.audioQuestion&&plan.audioOptions?.length===5?plan.audioOptions.map((t,i)=>
+   const survey=planSurvey(plan,'auditory');
+   body='<p>'+esc(survey.question||'청각 설문 문항이 아직 확정되지 않았습니다. 연구원에게 문의해 주세요.')+'</p>'+
+    (audioReady(plan)?survey.options.map((t,i)=>
       '<label class="participant-confirm"><input type="radio" required name="rating" value="'+(i+1)+'"> '+t+'</label>').join(''):'');
   }
-  return open+body+'<button type="submit" class="btn" '+((!plan.audioQuestion||plan.audioOptions?.length!==5)&&slot.startsWith('auditory')?'disabled':'')+'>설문 제출</button></form></section>';
+  return open+body+'<button type="submit" class="btn" '+(!audioReady(plan)&&slot.startsWith('auditory')?'disabled':'')+'>설문 제출</button></form></section>';
  }
  document.addEventListener('click',async e=>{
   if(e.target.id!=='v2-participant-ready')return;
