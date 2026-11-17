@@ -1,4 +1,4 @@
-import {installYurifV2} from './experiment-v2-controller.js?v=eureka-name-fix';
+import {installYurifV2} from './experiment-v2-controller.js?v=pre-builder-20261117c';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signInAnonymously,signOut} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocs,onSnapshot,writeBatch,setDoc,serverTimestamp,query,where} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
@@ -25,7 +25,7 @@ window.yurifCloud={ready:false,status:'연결 중',initialData:null,queueSave};
 installYurifV2({auth,store});
 
 function show(screen){
- for(const id of ['entry-screen','login-screen','guest-screen','workspace'])$(id).hidden=id!==screen;
+ for(const id of ['entry-screen','participant-screen','login-screen','guest-screen','workspace'])$(id).hidden=id!==screen;
  if(screen!=='workspace')document.body.classList.remove('yurif-workspace-active');
  else document.body.classList.add('yurif-workspace-active');
 }
