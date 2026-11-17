@@ -490,8 +490,8 @@ $('participant-entry-form').addEventListener('submit',async e=>{
  e.preventDefault();
  if(!auth.currentUser?.isAnonymous)return portalMsg('참가자 인증이 필요합니다. 연구원 계정과 별도의 브라우저에서 접속해 주세요.');
  const pasted=String($('participant-access-code').value||'').trim();
- const embeddedKey=pasted.match(/(?:임시\\s*비밀번호|입장\\s*코드)\\s*[:：]\\s*([0-9a-f]{32})/i);
- const embeddedCode=pasted.match(/참가자\\s*코드\\s*[:：]\\s*([^\\s\\\\]+)/i);
+ const embeddedKey=pasted.match(/(?:임시\s*비밀번호|입장\s*코드)\s*[:：]\s*([0-9a-f]{32})/i);
+ const embeddedCode=pasted.match(/참가자\s*코드\s*[:：]\s*([^\s\\]+)/i);
  const key=(embeddedKey?.[1]||pasted).trim().toLowerCase().replaceAll('-','');
  let code=$('participant-code')?.value.trim()||'';
  if(!code&&embeddedCode){code=embeddedCode[1];$('participant-code').value=code}
