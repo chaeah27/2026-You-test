@@ -537,6 +537,15 @@ function preBuilder(){
  '<div id="pre-rich" class="pre-rich" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="연구 목적, 절차, 예상되는 불편, 중단 권리, 자료 보관과 문의 방법을 작성해 주세요."></div></div>'+
  '<div class="pre-builder"><h3>사전 설문 항목</h3><p class="muted">드롭다운·단일 선택·복수 선택·서술형을 추가할 수 있습니다.</p><div id="pre-editor-fields">'+preFieldsEditor()+'</div><button type="button" class="btn secondary" id="pre-add">＋ 질문 추가</button></div>';
 }
+window.yurifPreBuilder=preBuilder;
+window.yurifPreRead=()=>{
+ const el=$('pre-rich');
+ const consentText=String(el?.innerText||'').trim().slice(0,15000),consentHtml=preClean(el?.innerHTML||'');
+ const preQuestions=participantState.fields.map((q,i)=>({id:'q'+(i+1),label:String(q.label||'').trim().slice(0,200),type:q.type,required:!!q.required,options:q.type==='text'?[]:preOptions(q)}));
+ if(!consentText)throw Error('사전 안내서를 작성해 주세요.');
+ if(preQuestions.some(q=>!q.label||(q.type!=='text'&&q.options.length<2)))throw Error('사전 질문의 제목과 선택지 두 개 이상을 확인해 주세요.');
+ return {consentText,consentHtml,preQuestions,infoVersion:new Date().toISOString()};
+};
 function preQuestionHtml(q,i){
  const name='pre'+i,opts=Array.isArray(q.options)?q.options:[];
  let html='';
