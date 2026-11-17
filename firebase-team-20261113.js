@@ -573,9 +573,13 @@ function preFieldsEditor(){
  '<label class="participant-confirm"><input type="checkbox" data-pre-required="'+i+'" '+(q.required?'checked':'')+'> 필수 응답</label><button type="button" class="btn secondary" data-pre-delete="'+i+'">삭제</button></div>').join('');
 }
 function preBuilder(){
+ const template=window.yurifFirstStageInfoTemplate?.();
+ if(!participantState.fields.length&&template){
+  participantState.fields=template.preQuestions.map(q=>({type:q.type,label:q.label,options:q.options.join('\n'),required:q.required}));
+ }
  return '<div class="field"><label>사전 안내서 및 동의 설명문 (필수)</label><div class="pre-toolbar"><button type="button" data-pre-format="bold">굵게</button><button type="button" data-pre-format="underline">밑줄</button><button type="button" data-pre-format="insertUnorderedList">목록</button></div>'+
- '<div id="pre-rich" class="pre-rich" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="연구 목적, 절차, 예상되는 불편, 중단 권리, 자료 보관과 문의 방법을 작성해 주세요."></div></div>'+
- '<div class="pre-builder"><h3>사전 설문 항목</h3><p class="muted">드롭다운·단일 선택·복수 선택·서술형을 추가할 수 있습니다.</p><div id="pre-editor-fields">'+preFieldsEditor()+'</div><button type="button" class="btn secondary" id="pre-add">＋ 질문 추가</button></div>';
+ '<div id="pre-rich" class="pre-rich" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="연구 목적, 절차, 예상되는 불편, 중단 권리, 자료 보관과 문의 방법을 작성해 주세요.">'+(template?.consentHtml||'')+'</div><p class="muted">1차 실험용 기본 안내문이 자동 입력되었습니다. 대괄호 항목은 실제 운영 기준으로 반드시 수정하세요.</p></div>'+
+ '<div class="pre-builder"><h3>사전 설문 항목</h3><p class="muted">1차 실험용 9개 문항이 자동 입력됩니다. 질문을 추가·수정·삭제할 수 있습니다. 건강 관련 응답은 민감정보일 수 있으므로 별도 동의 및 접근 제한을 확인하세요.</p><div id="pre-editor-fields">'+preFieldsEditor()+'</div><button type="button" class="btn secondary" id="pre-add">＋ 질문 추가</button></div>';
 }
 window.yurifPreBuilder=preBuilder;
 window.yurifPreRead=()=>{
@@ -583,6 +587,7 @@ window.yurifPreRead=()=>{
  const consentText=String(el?.innerText||'').trim().slice(0,15000),consentHtml=preClean(el?.innerHTML||'');
  const preQuestions=participantState.fields.map((q,i)=>({id:'q'+(i+1),label:String(q.label||'').trim().slice(0,200),type:q.type,required:!!q.required,options:q.type==='text'?[]:preOptions(q)}));
  if(!consentText)throw Error('사전 안내서를 작성해 주세요.');
+ if(/\[[^\]]*(?:입력|기재|확정|여부|방법)[^\]]*\]/.test(consentText))throw Error('안내서의 대괄호로 표시된 미확정 사항을 실제 연구 운영 내용으로 수정해 주세요.');
  if(preQuestions.some(q=>!q.label||(q.type!=='text'&&q.options.length<2)))throw Error('사전 질문의 제목과 선택지 두 개 이상을 확인해 주세요.');
  return {consentText,consentHtml,preQuestions,infoVersion:new Date().toISOString()};
 };
