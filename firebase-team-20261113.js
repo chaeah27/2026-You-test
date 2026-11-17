@@ -458,7 +458,7 @@ $('researcher-signup-form').addEventListener('submit',async e=>{
  }catch(ex){$('signup-message').textContent='계정 생성 실패: '+friendly(ex)}
  finally{researcherSigningUp=false;btn.disabled=false;$('signup-password').value=''}
 });
-const participantState={key:'',plan:null,consent:null,answers:new Map(),adminPlans:[],adminSelected:'',adminRows:[],adminBusy:false,fields:[]};
+const participantState={key:'',plan:null,consent:null,answers:new Map(),adminPlans:[],adminSelected:'',adminRows:[],adminBusy:false,fields:[],preStep:1,preDraft:null,preRead:false};
 const participantPlanRef=key=>doc(store,'participantAccess',key);
 const participantConsentRef=key=>doc(store,'participantConsents',key);
 const participantAnswerRef=(key,slot)=>doc(store,'participantAnswers',key,'items',slot);
@@ -480,7 +480,7 @@ async function enterParticipantPortal(){
 $('go-participant').addEventListener('click',enterParticipantPortal);
 $('participant-exit').addEventListener('click',async()=>{
  window.yurifV2?.stopParticipant();
- participantState.key='';participantState.plan=null;participantState.consent=null;participantState.answers=new Map();
+ participantState.key='';participantState.plan=null;participantState.consent=null;participantState.answers=new Map();participantState.preStep=1;participantState.preDraft=null;participantState.preRead=false;
  $('participant-steps').innerHTML='';$('participant-access-code').value='';$('participant-entry-form').hidden=false;portalMsg('');
  // Preserve anonymous session so an accidental exit does not lock the participant out of the one-time consent record.
  show('entry-screen');
@@ -496,7 +496,7 @@ $('participant-entry-form').addEventListener('submit',async e=>{
   const snap=await getDoc(participantPlanRef(key));
   if(!snap.exists()||snap.data().active!==true)throw Error('활성화된 참가 코드가 아닙니다.');
   if(snap.data().v2&&code!==snap.data().code)throw Error('참가자 코드와 임시 비밀번호가 일치하지 않습니다.');
-  participantState.key=key;participantState.plan=snap.data();
+  participantState.key=key;participantState.plan=snap.data();participantState.preStep=1;participantState.preDraft=null;participantState.preRead=false;
   const consentSnap=await getDoc(participantConsentRef(key));
   participantState.consent=consentSnap.exists()?consentSnap.data():null;
   if(participantState.consent&&participantState.consent.uid!==auth.currentUser.uid)
@@ -621,12 +621,33 @@ function renderParticipantSteps(){
  const root=$('participant-steps'),plan=participantState.plan,consent=participantState.consent;
  if(!root||!plan)return;
  if(!consent){
-  root.innerHTML='<section class="panel"><h2>사전 안내서 확인하기</h2>'+
-   '<details id="participant-info" open><summary>사전 안내서 열기</summary><div class="participant-consent-copy">'+(plan.consentHtml?preClean(plan.consentHtml):shortText(plan.consentText).replace(/\n/g,'<br>'))+'</div></details>'+ '<form id="pre-response"><h3>사전 설문</h3>'+(plan.preQuestions||[]).map(preQuestionHtml).join('')+'</form>'+
-   '<label class="participant-confirm"><input type="checkbox" id="participant-read-check"> 안내서를 읽고 연구 목적·절차·중단 권리를 확인했습니다.</label>'+
-   '<div class="actions"><button type="button" class="btn" id="participant-agree">동의</button>'+
-   '<button type="button" class="btn secondary" id="participant-decline">비동의</button></div>'+
-   '<p class="muted">동의하지 않으면 설문이 시작되지 않습니다. 참여는 자발적이며, 중단을 원하면 연구원에게 알려 주세요.</p></section>';
+  const step=participantState.preStep||1;
+  const indicator='<div class="pre-steps-progress" aria-label="사전 참여 절차"><span class="'+(step===1?'current':'')+'">1. 안내서</span><span class="'+(step===2?'current':'')+'">2. 사전 설문</span><span class="'+(step===3?'current':'')+'">3. 연구 참여 동의</span></div>';
+  if(step===1){
+   root.innerHTML='<section class="panel"><h2>사전 안내서</h2>'+indicator+
+    '<p class="muted">연구의 목적과 예상되는 불편, 참여자의 권리 및 자료 처리에 대한 설명을 읽어주세요.</p>'+
+    '<div class="participant-consent-copy">'+(plan.consentHtml?preClean(plan.consentHtml):shortText(plan.consentText).replace(/\n/g,'<br>'))+'</div>'+
+    '<label class="participant-confirm"><input type="checkbox" id="participant-read-check" '+(participantState.preRead?'checked':'')+'> 안내서를 읽고 연구 목적·절차·중단 권리를 확인했습니다.</label>'+
+    '<div class="actions"><button type="button" class="btn" id="participant-info-next">확인하고 다음 단계</button><button type="button" class="btn secondary" id="participant-decline">참여하지 않음</button></div></section>';
+   return;
+  }
+  if(step===2){
+   const questions=Array.isArray(plan.preQuestions)?plan.preQuestions:[];
+   root.innerHTML='<section class="panel"><h2>사전 설문</h2>'+indicator+
+    '<p class="muted">실험 전 안전 확인 및 현재 상태에 관한 질문입니다. 선택 문항은 응답하지 않아도 됩니다. 안전 관련 우려가 있다면 연구진에게 별도로 알려주세요.</p>'+
+    '<form id="pre-response">'+(questions.length?questions.map(preQuestionHtml).join(''):'<p>추가 사전 설문 문항이 없습니다.</p>')+
+    '<div class="actions"><button type="button" class="btn secondary" id="participant-pre-back">이전 단계</button><button type="submit" class="btn">설문 확인하고 다음 단계</button></div></form></section>';
+   restoreParticipantDraft(root,plan);
+   return;
+  }
+  root.innerHTML='<section class="panel"><h2>연구 참여 동의</h2>'+indicator+
+   '<p>사전 안내서와 사전 설문을 확인했습니다. 아래 내용을 읽고 연구 참여 여부를 선택해 주세요.</p>'+
+   '<div class="participant-consent-copy"><p>본인은 연구 목적과 기본 절차, 생리적 측정 및 설문, 예상되는 불편과 위험, 자료 수집·이용 및 보관에 관한 설명을 확인했습니다.</p>'+
+   '<p>참여 여부는 자발적으로 결정하며, 참여하지 않거나 진행 중 중단하여도 불이익이 없음을 이해했습니다. 연구 참여 및 안내받은 범위의 연구자료 수집·이용에 동의하는 경우에만 아래 동의 버튼을 선택합니다.</p>'+
+   '<p class="muted">보호자 동의 또는 별도의 개인정보·민감정보 동의가 필요한 경우 연구진이 추가로 확인해야 하며, 이 화면만으로 대체되지 않습니다.</p></div>'+
+   '<div class="actions"><button type="button" class="btn secondary" id="participant-consent-back">이전 단계</button>'+
+   '<button type="button" class="btn" id="participant-agree">동의하고 실험 준비</button>'+
+   '<button type="button" class="btn secondary" id="participant-decline">동의하지 않음</button></div></section>';
   return;
  }
  if(!consent.agreed){
@@ -651,35 +672,55 @@ function renderParticipantSteps(){
   '<div class="field"><label>추가 느낌 · 특이사항 (선택)</label><textarea name="note" maxlength="1000"></textarea></div>'+
   '<button type="submit" class="btn" id="participant-survey-save">'+(completed===slots.length-1?'최종 설문 저장':'응답 저장하고 다음 단계')+'</button></form></section>';
 }
-async function recordParticipantConsent(agreed){
- if(!participantState.plan||!participantState.key||!auth.currentUser?.isAnonymous)return;
- if(agreed&&!$('participant-read-check')?.checked)return portalMsg('안내서 확인란에 먼저 체크해 주세요.');
- const plan=participantState.plan,preAnswers={};
- if(agreed){
-  const form=$('pre-response');if(!form?.reportValidity())return portalMsg('필수 사전 설문에 응답해 주세요.');
-  const data=new FormData(form);
-  for(let i=0;i<(plan.preQuestions||[]).length;i++){
-   const q=plan.preQuestions[i],values=data.getAll('pre'+i).map(String),opts=q.options||[];
-   if(q.required&&!values.length)return portalMsg('필수 질문에 응답해 주세요: '+q.label);
-   if(q.type==='text'){
-    const v=String(values[0]||'').trim().slice(0,800);
-    if(q.required&&!v)return portalMsg('필수 질문에 응답해 주세요: '+q.label);
-    preAnswers[q.id]=v;
-   }else{
-    if(values.some(v=>!Number.isInteger(Number(v))||Number(v)<0||Number(v)>=opts.length))return portalMsg('선택 항목을 다시 확인해 주세요.');
-    preAnswers[q.id]=q.type==='checkbox'?values.map(v=>opts[Number(v)]):(values.length?opts[Number(values[0])]:'');
+function collectParticipantDraft(form,plan){
+ const result={};
+ const data=new FormData(form);
+ for(let i=0;i<(plan.preQuestions||[]).length;i++){
+  const q=plan.preQuestions[i],values=data.getAll('pre'+i).map(String),opts=q.options||[];
+  if(q.required&&!values.length)throw Error('필수 질문에 응답해 주세요: '+q.label);
+  if(q.type==='text'){
+   const v=String(values[0]||'').trim().slice(0,800);
+   if(q.required&&!v)throw Error('필수 질문에 응답해 주세요: '+q.label);
+   result[q.id]=v;
+  }else{
+   if(values.some(v=>!Number.isInteger(Number(v))||Number(v)<0||Number(v)>=opts.length))throw Error('선택지를 다시 확인해 주세요.');
+   result[q.id]=q.type==='checkbox'?values.map(v=>opts[Number(v)]):(values.length?opts[Number(values[0])]:'');
+  }
+ }
+ return result;
+}
+function restoreParticipantDraft(root,plan){
+ const draft=participantState.preDraft;
+ if(!draft)return;
+ for(let i=0;i<(plan.preQuestions||[]).length;i++){
+  const q=plan.preQuestions[i],value=draft[q.id],name='pre'+i;
+  const fields=Array.from(root.querySelectorAll('[name="'+name+'"]'));
+  if(q.type==='text'||q.type==='select'){
+   if(fields[0])fields[0].value=q.type==='text'?(value||''):value==null||value===''?'':String((q.options||[]).indexOf(value));
+  }else{
+   for(const field of fields){
+    const option=(q.options||[])[Number(field.value)];
+    field.checked=q.type==='checkbox'?Array.isArray(value)&&value.includes(option):value===option;
    }
   }
  }
- const data={uid:auth.currentUser.uid,agreed,preAnswers,infoVersion:plan.infoVersion||'legacy',
+}
+async function recordParticipantConsent(agreed){
+ if(!participantState.plan||!participantState.key||!auth.currentUser?.isAnonymous)return;
+ if(agreed&&(participantState.preStep!==3||!participantState.preRead||!participantState.preDraft))
+  return portalMsg('사전 안내서와 설문을 순서대로 확인해 주세요.');
+ const plan=participantState.plan;
+ const data={uid:auth.currentUser.uid,agreed,preAnswers:agreed?participantState.preDraft:{},infoVersion:plan.infoVersion||'legacy',
  infoSnapshot:{consentText:plan.consentText||'',consentHtml:plan.consentHtml||'',preQuestions:plan.preQuestions||[]},createdAt:serverTimestamp()};
+ const buttons=Array.from(document.querySelectorAll('#participant-agree,#participant-decline'));
+ buttons.forEach(b=>b.disabled=true);
  try{
   await setDoc(participantConsentRef(participantState.key),data);
   const stored=await getDoc(participantConsentRef(participantState.key));
   if(!stored.exists()||stored.data().agreed!==agreed)throw Error('동의 기록 확인 실패');
   participantState.consent=stored.data();portalMsg(agreed?'동의 응답 저장 확인 완료':'비동의 응답 저장 확인 완료');
   renderParticipantSteps();
- }catch(e){portalMsg('동의 기록 저장 실패: '+friendly(e)+' · 저장 확인 전에는 다음 단계로 진행할 수 없습니다.')}
+ }catch(e){portalMsg('동의 기록 저장 실패: '+friendly(e)+' · 저장 확인 전에는 다음 단계로 진행할 수 없습니다.');buttons.forEach(b=>b.disabled=false)}
 }
 async function recordParticipantAnswer(form){
  if(!participantState.plan||!participantState.consent?.agreed)return;
@@ -702,8 +743,24 @@ async function recordParticipantAnswer(form){
  }catch(e){portalMsg('응답 저장 실패: '+friendly(e)+' · 저장 성공 전에는 다음 설문으로 넘어가지 않습니다.');button.disabled=false}
 }
 document.addEventListener('click',e=>{
- if(e.target?.id==='participant-agree')recordParticipantConsent(true);
- if(e.target?.id==='participant-decline')recordParticipantConsent(false);
+ const id=e.target?.id;
+ if(id==='participant-info-next'){
+  if(!$('participant-read-check')?.checked)return portalMsg('안내서 확인란에 먼저 체크해 주세요.');
+  participantState.preRead=true;participantState.preStep=2;portalMsg('');renderParticipantSteps();return;
+ }
+ if(id==='participant-pre-back'){participantState.preStep=1;portalMsg('');renderParticipantSteps();return}
+ if(id==='participant-consent-back'){participantState.preStep=2;portalMsg('');renderParticipantSteps();return}
+ if(id==='participant-agree')recordParticipantConsent(true);
+ if(id==='participant-decline')recordParticipantConsent(false);
+});
+document.addEventListener('submit',e=>{
+ if(e.target?.id!=='pre-response')return;
+ e.preventDefault();
+ if(!e.target.reportValidity())return portalMsg('필수 사전 설문에 응답해 주세요.');
+ try{
+  participantState.preDraft=collectParticipantDraft(e.target,participantState.plan);
+  participantState.preStep=3;portalMsg('');renderParticipantSteps();
+ }catch(err){portalMsg(err.message)}
 });
 document.addEventListener('submit',e=>{
  if(e.target?.id!=='participant-survey-form')return;
