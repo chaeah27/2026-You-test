@@ -510,10 +510,11 @@ function labRegisteredPlan(){
   (plans.length?'':'<p class="muted">아직 등록된 참가자가 없거나 Firebase 실험 목록을 불러오는 중입니다. 먼저 실험 등록에서 참가자를 등록해 주세요.</p>')+
   details+(plan?'<div class="actions"><button type="button" class="btn" data-lab-action="go-registered">선택한 참가자로 정식 실험 진행</button></div>':'')+'</section>';
 }
+window.yurifV2RefreshRegisteredPreview=()=>{const box=document.getElementById('lab-registered-preview');if(box)box.outerHTML=labRegisteredPlan()};
 function labEditor(){
  if(labArchiveTab==='stage1')return labRegisteredPlan()+
   '<section class="panel"><h3>수동 구간 설정</h3><p class="muted">1차 감각 실험은 위에서 등록된 참가자를 선택해 자동 설정합니다. 별도의 개인 테스트는 개인 예비실험 탭에서 수동으로 설정할 수 있습니다.</p></section>';
- return '<section class="panel"><h2>실험 구간 미리 설정</h2><p class="muted">참가자 코드와 실험 종류를 정한 뒤, 구간 이름·환경·목표 시간을 설정하세요. 예비실험 기록은 공식 실험 세션에 포함되지 않습니다.</p><div class="formgrid"><div class="field"><label>실험 종류</label><select id="lab-mode"><option value="pilot" '+(labArchiveTab==='pilot'?'selected':'')+'>개인 예비실험</option><option value="stage1" '+(labArchiveTab==='stage1'?'selected':'')+'>1차 감각 실험</option><option value="stage2" '+(labArchiveTab==='stage2'?'selected':'')+'>2차 대화 실험</option></select></div><div class="field"><label>참가자 또는 개인 코드</label><input id="lab-code" maxlength="30" value="개인" placeholder="예: P01 / 개인"></div></div><div id="lab-step-editor"></div><div class="actions"><button type="button" class="btn secondary" data-lab-action="add-step">＋ 구간 추가</button><button type="button" class="btn" data-lab-action="create">실험 계획 확정</button></div></section>';
+ return labRegisteredPlan()+'<section class="panel"><h2>실험 구간 미리 설정 · 개인 예비/2차</h2><p class="muted">참가자 코드와 실험 종류를 정한 뒤, 구간 이름·환경·목표 시간을 설정하세요. 예비실험 기록은 공식 실험 세션에 포함되지 않습니다.</p><div class="formgrid"><div class="field"><label>실험 종류</label><select id="lab-mode"><option value="pilot" '+(labArchiveTab==='pilot'?'selected':'')+'>개인 예비실험</option><option value="stage1" '+(labArchiveTab==='stage1'?'selected':'')+'>1차 감각 실험</option><option value="stage2" '+(labArchiveTab==='stage2'?'selected':'')+'>2차 대화 실험</option></select></div><div class="field"><label>참가자 또는 개인 코드</label><input id="lab-code" maxlength="30" value="개인" placeholder="예: P01 / 개인"></div></div><div id="lab-step-editor"></div><div class="actions"><button type="button" class="btn secondary" data-lab-action="add-step">＋ 구간 추가</button><button type="button" class="btn" data-lab-action="create">실험 계획 확정</button></div></section>';
 }
 let labPlan=labDefaults('pilot');
 function labRenderStepEditor(){
