@@ -1,4 +1,4 @@
-import {installYurifV2} from './experiment-v2-controller.js?v=sensory-survey-editor-20261117';
+import {installYurifV2} from './experiment-v2-controller.js?v=experiment-link-fix-20261117';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signInAnonymously,signOut} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js';
 import {getFirestore,collection,doc,getDoc,getDocs,onSnapshot,writeBatch,setDoc,serverTimestamp,query,where} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
