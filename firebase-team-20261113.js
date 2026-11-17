@@ -525,6 +525,46 @@ function preClean(html){
  }
  return Array.from(d.body.childNodes).map(walk).join('');
 }
+
+/* 1차 실험 참가자 공통 안내서 · 설문 기본 양식.
+   연구원은 실제 위험, 저장 정책, 연락처를 확인하고 발급 전에 수정해야 합니다. */
+const firstStageGuide=[
+ {tag:'h3',body:'유리프 연구 참여 사전 안내서'},
+ {tag:'p',body:'본 연구는 시각·청각·후각 환경의 변화에 따른 생리적 반응과 주관적 상태를 알아보기 위한 연구입니다.'},
+ {tag:'h3',body:'1. 실험 진행 방법'},
+ {tag:'p',body:'참가자는 실험자의 설명에 따라 시각·청각·후각 환경의 변화를 경험합니다. 연구진은 피부저항 변화를 측정하여 피부전기활동(EDA)을 분석하기 위한 자료와 심박수를 수집하며, 실험 과정에서 설문을 진행합니다. 참가자는 실험자의 안내에 협조하여 각 과정에 순차적으로 참여해 주시기 바랍니다.'},
+ {tag:'h3',body:'2. 예상되는 불편 및 안전'},
+ {tag:'p',body:'빛과 소리, 향기 등의 자극으로 눈의 피로, 두통, 놀람, 메스꺼움, 기침 또는 알레르기 증상이 나타날 수 있습니다. 센서 부착 부위에 일시적인 피부 자극이 생길 수도 있습니다. 평소 특정 감각 자극이 불편하거나 실험 중 이상을 느낀 경우 연구진에게 알려주세요. 심한 불편이 생기면 즉시 자극 및 측정을 중단합니다.'},
+ {tag:'h3',body:'3. 참여자의 권리'},
+ {tag:'p',body:'참여는 자발적입니다. 참여를 거절하거나 실험 도중 중단하여도 성적, 평가, 학교생활 또는 연구진과의 관계에서 불이익이 없습니다. 궁금한 점은 언제든 질문할 수 있으며, 중단하려면 연구진에게 말씀해 주세요. 이미 수집된 자료의 처리 및 삭제 가능 여부는 연구진에게 문의할 수 있습니다.'},
+ {tag:'h3',body:'4. 연구자료 및 개인정보'},
+ {tag:'p',body:'연구에서는 가급적 실명 대신 참가자 코드를 사용합니다. 실험 조건, 설문 응답, 피부저항 관련 원시 측정값, 심박수 및 동의 기록은 연구 분석에 활용됩니다. 연구 목적에 따른 개인별 결과를 공개하지 않고, 승인된 연구진에 한해 자료 접근을 제한합니다. 참가자 코드 역시 다른 정보와 결합하여 개인을 알아볼 가능성이 있으므로 안전하게 관리해야 합니다.'},
+ {tag:'p',body:'자료 보관 장소·관리 방식: [실제 저장 장소 및 접근 권한 입력]'},
+ {tag:'p',body:'보관 기간·삭제 방법: [실제 보관 기간과 삭제 방법 입력]'},
+ {tag:'p',body:'제3자 제공·추가 활용 여부: [해당 여부 및 범위 입력]'},
+ {tag:'h3',body:'5. 보상·문의'},
+ {tag:'p',body:'연구 참여에 따른 보상 및 중도 중단 시 처리: [해당 사항 입력]'},
+ {tag:'p',body:'연구책임자·지도교사 및 문의 연락처: [담당자와 공식 연락처 입력]'},
+ {tag:'p',body:'연구의 구체적인 가설이나 조건별 예상 반응을 미리 알 필요는 없습니다. 다만 참여에 중요한 위험과 개인정보 처리에 관해서는 충분한 설명을 요청할 수 있습니다.'}
+];
+const firstStageGuideHtml=firstStageGuide.map(x=>'<'+x.tag+'>'+safe(x.body)+'</'+x.tag+'>').join('');
+const firstStageQuestions=[
+ {id:'q1',label:'향기 자극에 알레르기 또는 심한 불편을 경험한 적이 있나요?',type:'radio',options:['없음','있음','잘 모르겠음','연구진과 비공개 상담 희망'],required:true},
+ {id:'q2',label:'밝은 빛이나 조명 변화로 불편을 느끼는 편인가요?',type:'radio',options:['아니요','예','잘 모르겠음','연구진과 비공개 상담 희망'],required:true},
+ {id:'q3',label:'소리 자극에 불편이나 과민 반응을 경험한 적이 있나요?',type:'radio',options:['아니요','예','잘 모르겠음','연구진과 비공개 상담 희망'],required:true},
+ {id:'q4',label:'피부에 센서를 부착하는 데 불편이나 우려가 있나요?',type:'radio',options:['아니요','예','잘 모르겠음','연구진과 비공개 상담 희망'],required:true},
+ {id:'q5',label:'현재 몸 상태나 감각 자극과 관련하여 실험 전에 연구진에게 알릴 사항이 있나요?',type:'radio',options:['없음','있음','잘 모르겠음','연구진과 비공개 상담 희망'],required:true},
+ {id:'q6',label:'지난밤 수면 시간은 대략 어느 정도였나요?',type:'select',options:['5시간 미만','5시간 이상~6시간 미만','6시간 이상~7시간 미만','7시간 이상~8시간 미만','8시간 이상','기억나지 않음','응답하지 않음'],required:false},
+ {id:'q7',label:'현재 상태에 해당하는 항목을 선택해 주세요. (해당 사항이 없으면 선택하지 않아도 됩니다.)',type:'checkbox',options:['피곤함','졸림','긴장됨','두통 또는 몸의 불편함','평소와 다른 컨디션'],required:false},
+ {id:'q8',label:'실험 전에 카페인 음료를 마셨나요?',type:'radio',options:['예','아니요','잘 모르겠음','응답하지 않음'],required:false},
+ {id:'q9',label:'MBTI 유형을 알고 있다면 선택해 주세요. (선택 사항이며 실험 참여와 무관합니다.)',type:'select',options:['ISTJ','ISFJ','INFJ','INTJ','ISTP','ISFP','INFP','INTP','ESTP','ESFP','ENFP','ENTP','ESTJ','ESFJ','ENFJ','ENTJ','모름 / 응답하지 않음'],required:false}
+];
+window.yurifFirstStageInfoTemplate=()=>({
+ consentHtml:firstStageGuideHtml,
+ consentText:firstStageGuide.map(x=>x.body).join('\n\n'),
+ preQuestions:structuredClone(firstStageQuestions)
+});
+
 function preOptions(q){return String(q.options||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean).slice(0,25)}
 function preFieldsEditor(){
  return participantState.fields.map((q,i)=>'<div class="pre-edit-item"><label>질문 '+(i+1)+'</label><input data-pre-title="'+i+'" value="'+safe(q.label)+'" maxlength="200" placeholder="질문 내용">'+
