@@ -19,7 +19,11 @@ export function installYurifV2({auth,store}){
  const defaultsSurvey=()=>({visual:{rankingQuestion:'경험한 네 조명을 가장 마음에 들었던 순서로 나열해 주세요.',discomfortQuestion:'불쾌감을 느낀 조명이 있다면 모두 선택해 주세요. 없으면 선택하지 않아도 됩니다.'},olfactory:{question:'해당 냄새를 맡았을 때 느낀 감정에 표시해 주세요.',options:['매우 나쁨','살짝 불쾌함','아무 변화 없음','좋음','매우 좋음']},auditory:{question:'',options:[]}});
  function planSurvey(plan,type){
   const defaults=defaultsSurvey()[type];
-  if(type==='auditory'&&!plan?.surveyTemplates?.auditory)return {question:plan?.audioQuestion||'',options:plan?.audioOptions||[]};
+  if(type==='auditory'){
+   const template=plan?.surveyTemplates?.auditory;
+   if(!template?.question&&plan?.audioQuestion)return {question:plan.audioQuestion,options:plan.audioOptions||[]};
+   if(!template)return {question:plan?.audioQuestion||'',options:plan?.audioOptions||[]};
+  }
   return {...defaults,...(plan?.surveyTemplates?.[type]||{})};
  }
  function audioReady(plan){const q=planSurvey(plan,'auditory');return !!q.question&&Array.isArray(q.options)&&q.options.length===5}
@@ -318,8 +322,9 @@ export function installYurifV2({auth,store}){
    const progress=await getDocFromServer(refProgress(plan.accessKey));
    if(!progress.exists()||progress.data().phase!=='registered')throw Error('실험 시작 이후에는 설문 문항을 수정할 수 없습니다.');
    const batch=writeBatch(store);
-   batch.update(doc(plans,plan.id),{audioQuestion:question,audioOptions:options});
-   batch.update(doc(store,'participantAccess',plan.accessKey),{audioQuestion:question,audioOptions:options});
+   const templates={...(plan.surveyTemplates||{}),auditory:{type:'auditory',question,options}};
+   batch.update(doc(plans,plan.id),{audioQuestion:question,audioOptions:options,surveyTemplates:templates});
+   batch.update(doc(store,'participantAccess',plan.accessKey),{audioQuestion:question,audioOptions:options,surveyTemplates:templates});
    await batch.commit();
    const confirmed=await getDocFromServer(doc(plans,plan.id));
    if(!confirmed.exists()||confirmed.data().audioQuestion!==question)throw Error('서버 저장 확인 실패');
@@ -403,7 +408,7 @@ export function installYurifV2({auth,store}){
   }else if(slot.startsWith('olfactory')){
    const survey=planSurvey(plan,'olfactory');
    body='<p>'+esc(survey.question)+'</p>'+
-    survey.options.map((t,i)=>'<label class="participant-confirm"><input type="radio" required name="rating" value="'+(i+1)+'"> '+t+'</label>').join('');
+    survey.options.map((t,i)=>'<label class="participant-confirm"><input type="radio" required name="rating" value="'+(i+1)+'"> '+esc(t)+'</label>').join('');
   }else{
    const survey=planSurvey(plan,'auditory');
    body='<p>'+esc(survey.question||'청각 설문 문항이 아직 확정되지 않았습니다. 연구원에게 문의해 주세요.')+'</p>'+
