@@ -744,6 +744,7 @@ window.yurifV2SkipLocalSegments=(id,indices,reason='연구원 구간 건너뛰�
  render();
 };
 window.yurifV2HasSkippedSteps=id=>labDraft?.v2&&labDraft.id===id&&labDraft.steps.some(x=>x.skipped===true);
+window.yurifV2MarkPartial=id=>{if(labDraft?.v2&&labDraft.id===id){labDraft.status='partial';labDraft.incomplete=true;labSaveDraft()}};
 window.yurifV2GetLocalDraft=()=>labDraft?.v2?{id:labDraft.id,code:labDraft.code,startedAt:labDraft.startedAt,endedAt:labDraft.endedAt}:null;
 window.yurifV2SaveAbortedDraft=async(id)=>{
  if(!labDraft?.v2||labDraft.id!==id)throw Error('이 컴퓨터에 해당 실험의 초안이 없습니다. 다른 실험의 초안은 변경하지 않았습니다.');
