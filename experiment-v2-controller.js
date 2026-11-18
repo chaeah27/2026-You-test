@@ -623,7 +623,7 @@ export function installYurifV2({auth,store}){
    const local=window.yurifFindGsrRun?.(id);
    session.run=meta.exists()?meta.data():local||null;
    session.points=chunks.docs.sort((a,b)=>(a.data().index||0)-(b.data().index||0))
-    .flatMap(d=>Array.isArray(d.data().points)?d.data().points:[]);
+    .flatMap(d=>Array.isArray(d.data().points)?d.data().points.map(p=>Array.isArray(p)?p:(p&&Number.isFinite(p.time)&&Number.isFinite(p.adc)?[p.time,p.adc,p.phase??'',p.segmentId??'']:null)).filter(Boolean):[]);
    if(!session.points.length&&local?.gsrSamples?.length)session.points=local.gsrSamples;
    session.answers=new Map(answers.docs.map(x=>[x.id,x.data()]));
    if(session.run?.steps){
