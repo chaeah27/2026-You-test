@@ -19,7 +19,7 @@
   assertOrder(order);
   const result=[{id:'baseline',kind:'baseline',label:'안정',name:'초기 안정 상태',duration:60,position:-1,type:'baseline'}];
   order.forEach((env,i)=>{
-   result.push({id:'stimulus-'+i,kind:'stimulus',label:'환경'+(i+1),name:env.name,envId:env.id||'',duration:60,position:i,type:env.type});
+   result.push({id:'stimulus-'+i,kind:'stimulus',label:'환경'+(i+1),name:env.name,envId:env.id||'',duration:30,position:i,type:env.type});
    result.push({id:'rest-'+i,kind:'rest',label:'휴식'+(i+1),name:env.name+' 이후 휴식',envId:env.id||'',duration:30,position:i,type:'rest',surveyAfter:surveySlot(i)});
   });
   return result;
