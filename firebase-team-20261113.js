@@ -381,8 +381,8 @@ async function uploadGsrRun(run){
   }
   const meta={id,code:String(run.code||'').slice(0,60),date:run.date||'',mode:run.mode,
    startedAt:run.startedAt||null,endedAt:run.endedAt||null,
-   steps:(run.steps||[]).map(s=>({label:s.label||'',name:s.name||'',envName:s.envName||'',startedAt:s.startedAt||null,endedAt:s.endedAt||null})),
-   sampleCount:count,updatedAt:serverTimestamp()};
+   steps:(run.steps||[]).map(s=>({label:s.label||'',name:s.name||'',envName:s.envName||'',startedAt:s.startedAt||null,endedAt:s.endedAt||null,skipped:s.skipped===true,invalid:s.invalid===true,errorReason:String(s.errorReason||'').slice(0,140)})),
+   sampleCount:count,status:run.status|| (run.incomplete?'partial':run.interrupted?'aborted':'recorded'),incomplete:run.incomplete===true,updatedAt:serverTimestamp()};
   await setDoc(gsrRunRef(id),meta);
   const verified=await getDoc(gsrRunRef(id));
   const finalChunk=count?await getDoc(doc(store,'teamData','gsrRawChunks','items',id+'__'+String(lastChunk).padStart(5,'0'))):null;
