@@ -652,7 +652,7 @@ async function labFinish({interrupted=false}={}){
   cloud:samples.length?'pending':'unknown',cloudCount:0});
  if(!localOk){alert('로컬 저장 검증 실패. 진행 중인 실험 초안을 보존했으므로 데이터 백업 및 저장 공간을 확인해 주세요.');render();return}
  labDraft=null;localStorage.removeItem(LAB_DRAFT_KEY);render();
- if(!samples.length){alert('로컬 실험 기록은 확인했으나 GSR 원시 측정값이 없습니다. 센서 연결을 확인해 주세요.');return}
+ if(!samples.length){alert('로컬 실험 기록은 저장했지만 ADC 원시 측정값은 없습니다. 건너뛴 구간은 미완료로 표시됩니다.');return finished.v2===true}
  if(!window.yurifGsrSharing?.upload){
   recordLabSaveCheck({...lastLabSaveCheck,cloud:'failed'});
   alert('로컬 저장 확인 완료 ('+samples.length+'개). Firebase 원시값 공유 기능에 연결하지 못했습니다. 원시 CSV를 별도로 보존해 주세요.');
@@ -729,13 +729,29 @@ window.yurifV2StepRetry=(plan,index,time)=>{
  step.startedAt=time;step.endedAt=null;step.invalid=false;step.errorReason='';step.retries=(step.retries||0)+1;
  labSaveDraft();render();
 };
+window.yurifV2SkipLocalSegments=(id,indices,reason='연구원 구간 건너뛰기')=>{
+ if(!labDraft?.v2||labDraft.id!==id)throw Error('해당 실험의 로컬 초안이 없습니다. 기존 측정 기록을 변경하지 않았습니다.');
+ const at=Date.now();
+ if(!labDraft.startedAt)labDraft.startedAt=at;
+ for(const index of indices){
+  const step=labDraft.steps[index];
+  if(!step)throw Error('존재하지 않는 구간입니다: '+index);
+  if(step.endedAt&&!step.invalid&&!step.skipped)throw Error('이미 정상 완료된 구간입니다: '+index);
+  if(step.startedAt&&!step.endedAt)step.endedAt=at;
+  step.skipped=true;step.invalid=true;step.skippedAt=at;step.errorReason=reason;
+ }
+ if(!labSaveDraft())throw Error('건너뛴 구간의 로컬 메타데이터 저장에 실패했습니다.');
+ render();
+};
+window.yurifV2HasSkippedSteps=id=>labDraft?.v2&&labDraft.id===id&&labDraft.steps.some(x=>x.skipped===true);
 window.yurifV2GetLocalDraft=()=>labDraft?.v2?{id:labDraft.id,code:labDraft.code,startedAt:labDraft.startedAt,endedAt:labDraft.endedAt}:null;
 window.yurifV2SaveAbortedDraft=async(id)=>{
  if(!labDraft?.v2||labDraft.id!==id)throw Error('이 컴퓨터에 해당 실험의 초안이 없습니다. 다른 실험의 초안은 변경하지 않았습니다.');
  return await labFinish({interrupted:true});
 };
 window.yurifV2FinishLab=async()=>{
- if(!labDraft?.v2||!labDraft.steps.every(s=>s.startedAt&&s.endedAt&&!s.invalid))throw Error('21개 측정 구간이 모두 완료되지 않았습니다.');
+ if(!labDraft?.v2||!labDraft.steps.every(s=>s.skipped===true||(s.startedAt&&s.endedAt&&!s.invalid)))throw Error('측정 구간 중 미처리된 구간이 있습니다.');
+ if(labDraft.steps.some(s=>s.skipped)){labDraft.status='partial';labDraft.incomplete=true;labSaveDraft();}
  return await labFinish();
 };
 function registrationMergedView(){
