@@ -188,6 +188,7 @@ export function installYurifV2({auth,store}){
   }
   if(kind==='sensorError')action='<p role="alert">측정 중 센서 연결이 끊어졌습니다. 재연결 후 해당 구간을 재측정하거나 실험을 중단하세요. 이전 샘플은 삭제하지 않습니다.</p>'+btn('retry','센서 연결 후 해당 구간 재측정')+btn('abort','실험 중단 · 기록 보존');
   if(kind==='aborted')action='<p>이 실험은 중단 상태로 기록되었습니다. 미완료 구간과 측정한 ADC를 보존한 채 저장·종료할 수 있습니다.</p>'+btn('archive-aborted','중단된 기록 저장·종료');
+  if(['registered','setup','restReady','survey','measurement','rest'].includes(kind))action+=(action?' ':'')+btn('abort','실험 중단 · 기록 저장·종료');
   if(kind==='completed')action='<p>측정 기록 종료됨. 저장 상태와 세션 기록을 확인하세요.</p>';
   const last=(kind==='setup'||(kind==='survey'&&uploaded&&n<9))?'다음 환경: '+esc(plan.order[n+1]?.name||''):(kind==='restReady'?'지금 시작할 구간: '+esc(plan.order[n]?.name||'')+' 이후 30초 휴식':n>=0?'현재 환경: '+esc(plan.order[n]?.name||''):'초기 안정 상태');
   const consentStatus=state.consent?.agreed===true?'서버 동의 확인됨':state.consent?.agreed===false?'연구 참여 비동의':'서버 동의 확인 전';
@@ -376,9 +377,13 @@ export function installYurifV2({auth,store}){
   try{
    const action=button.dataset.v2Lab;
    if(action==='archive-aborted')await archiveInterruptedDraft();else if(action==='finish')await finish();else if(action==='retry')await retry();else if(action==='abort'){
-    await transition('aborted','sensorError',{abortedAt:Date.now()});
+    const plan=activePlan(),phase=state.progress?.phase;
+    if(!plan||!['registered','setup','restReady','survey','measurement','rest','sensorError'].includes(phase))throw Error('중단할 수 있는 실험 진행 상태가 아닙니다.');
+    if(!confirm(plan.code+' 실험을 중단하고 지금까지 측정한 ADC 기록을 저장·종료할까요? 미완료 구간은 그대로 남습니다.'))return;
+    await transition('aborted',phase,{abortedAt:Date.now()});
     const draft=window.yurifV2GetLocalDraft?.();
-    if(draft?.id===activePlan()?.id)await archiveInterruptedDraft();
+    if(draft?.id===plan.id)await archiveInterruptedDraft();
+    else {state.warning='실험 중단 상태가 Firebase에 저장되었습니다. 이 브라우저에 해당 실험의 로컬 ADC 초안이 없습니다.';refreshLab();}
    }else await beginStep(action);
   }catch(err){state.warning=String(err.message||err);alert('진행 불가: '+state.warning);refreshLab()}
   finally{button.disabled=false}
