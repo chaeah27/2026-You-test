@@ -182,7 +182,7 @@ export function installYurifV2({auth,store}){
   if(kind==='restReady')action=btn('rest','휴식 30초 시작');
   if(kind==='survey')action=uploaded?(n===9?btn('finish','최종 설문 확인 · 실험 종료 저장'):btn('stimulus','설문 저장 확인 · 다음 환경 준비 완료')):'<p>참가자가 설문을 저장하면 다음 측정을 진행할 수 있습니다.</p>';
   if(kind==='measurement'||kind==='rest'){
-   const seconds=kind==='measurement'?60:30;
+   const seconds=kind==='measurement'&&p.position===-1?60:30;
    action='<p>자동 종료 예정 · '+seconds+'초 측정 / 시작 '+(p.startedAt?esc(new Date(p.startedAt).toLocaleTimeString('ko-KR')):'—')+'</p>'+
     '<strong id="v2-countdown">남은 시간 계산 중…</strong>';
   }
@@ -271,7 +271,7 @@ export function installYurifV2({auth,store}){
   const p=state.progress,plan=activePlan();
   if(!p||!plan||!['measurement','rest'].includes(p.phase)||state.transitioning)return;
   if(!window.yurifV2ConnectedSensor?.()){await handleSensorFailure();return}
-  const duration=p.phase==='rest'?30000:60000;
+  const duration=p.phase==='measurement'&&p.position===-1?60000:30000;
   if(!p.startedAt||Date.now()-p.startedAt<duration)return;
   const stamp=Date.now();
   window.yurifV2StepEnd?.(plan,p.segment,stamp);
@@ -289,7 +289,7 @@ export function installYurifV2({auth,store}){
   await transition('completed','survey',{endedAt:Date.now()});
  }
  setInterval(()=>{endTimed().catch(()=>{});const el=$('v2-countdown'),p=state.progress;
-  if(el&&p?.startedAt){const remaining=(p.phase==='rest'?30:60)-Math.floor((Date.now()-p.startedAt)/1000);el.textContent='남은 시간 '+Math.max(0,remaining)+'초';}
+  if(el&&p?.startedAt){const remaining=(p.phase==='measurement'&&p.position===-1?60:30)-Math.floor((Date.now()-p.startedAt)/1000);el.textContent='남은 시간 '+Math.max(0,remaining)+'초';}
  },500);
  document.addEventListener('submit',async e=>{
   const form=e.target.closest('[data-v2-edit]');if(!form)return;
