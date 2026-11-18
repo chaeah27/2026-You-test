@@ -229,6 +229,19 @@ async function publish(){
  * 200-sample chunks ensure each document stays comfortably below 1 MiB.
  */
 const GSR_CHUNK=200;
+// Firestore forbids arrays nested directly inside arrays. Store each ADC tuple as a map,
+// then restore the original tuple shape for analysis, CSV exports and full verification.
+function gsrToCloudPoint(p){
+ if(!Array.isArray(p)||p.length<2||!Number.isFinite(p[0])||!Number.isFinite(p[1]))
+  throw Error('ADC 원시값 형식 오류: 원본 기록을 보존하고 업로드를 중단합니다.');
+ return {time:p[0],adc:p[1],phase:String(p[2]??''),segmentId:String(p[3]??'')};
+}
+function gsrFromCloudPoint(p){
+ if(Array.isArray(p))return p; // Read-only compatibility for older stored records.
+ if(p&&typeof p==='object'&&Number.isFinite(p.time)&&Number.isFinite(p.adc))
+  return [p.time,p.adc,p.phase??'',p.segmentId??''];
+ return null;
+}
 const gsrShared={
  runs:[],selected:'',points:[],chunks:[],offRuns:null,offSamples:null,
  interval:null,inflight:new Map(),verified:new Map(),notice:'',lastRender:0
@@ -289,7 +302,7 @@ function selectGsrShared(id){
  const q=query(gsrChunks,where('runId','==',id));
  gsrShared.offSamples=onSnapshot(q,snapshot=>{
   const chunks=snapshot.docs.map(d=>d.data()).filter(r=>Array.isArray(r.points)).sort((a,b)=>a.index-b.index);
-  const pts=[];for(const chunk of chunks)for(const p of chunk.points)if(Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1]))pts.push(p);
+  const pts=[];for(const chunk of chunks)for(const encoded of chunk.points){const p=gsrFromCloudPoint(encoded);if(p)pts.push(p)}
   gsrShared.points=pts;
   refreshGsrShared();
  },e=>{gsrShared.notice='원시값 조회 실패: '+friendly(e);refreshGsrShared()});
@@ -364,7 +377,7 @@ async function uploadGsrRun(run){
   for(let index=firstChunk;index<=lastChunk&&count;index+=1){
    const points=samples.slice(index*GSR_CHUNK,(index+1)*GSR_CHUNK);
    if(!points.length)continue;
-   await setDoc(doc(store,'teamData','gsrRawChunks','items',id+'__'+String(index).padStart(5,'0')),{runId:id,index,points,sampleCount:points.length});
+   await setDoc(doc(store,'teamData','gsrRawChunks','items',id+'__'+String(index).padStart(5,'0')),{runId:id,index,points:points.map(gsrToCloudPoint),sampleCount:points.length});
   }
   const meta={id,code:String(run.code||'').slice(0,60),date:run.date||'',mode:run.mode,
    startedAt:run.startedAt||null,endedAt:run.endedAt||null,
@@ -392,7 +405,7 @@ async function verifyFullGsrRun(run){
   if(chunk?.index!==i||!Array.isArray(chunk.points)||chunk.points.length!==items.length)
    throw Error('청크 '+i+' 누락 또는 개수 오류');
   for(let j=0;j<items.length;j++){
-   const actual=chunk.points[j],wanted=items[j];
+   const actual=gsrFromCloudPoint(chunk.points[j]),wanted=items[j];
    if(!Array.isArray(actual)||actual.length!==wanted.length||actual.some((value,k)=>value!==wanted[k]))
     throw Error('청크 '+i+' · '+j+' 원시값 또는 구간 분류 불일치');
   }
@@ -854,7 +867,7 @@ async function participantAdminRead(key,elementId='participant-admin-results'){
   let physiology=[];
   for(const run of runs){
    const chunkSnap=await getDocs(query(gsrChunks,where('runId','==',run.id)));
-   const points=chunkSnap.docs.flatMap(d=>Array.isArray(d.data().points)?d.data().points:[]);
+   const points=chunkSnap.docs.flatMap(d=>Array.isArray(d.data().points)?d.data().points.map(gsrFromCloudPoint).filter(Boolean):[]);
    for(const step of run.steps||[]){
     if(!step.startedAt||!step.endedAt)continue;
     const readings=points.filter(p=>Array.isArray(p)&&p[0]>=step.startedAt&&p[0]<step.endedAt);
