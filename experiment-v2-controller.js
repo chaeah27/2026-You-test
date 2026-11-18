@@ -180,7 +180,7 @@ export function installYurifV2({auth,store}){
   if(kind==='registered')action=btn('baseline','실험 시작 · 안정 상태 60초');
   if(kind==='setup')action=btn('stimulus','다음 환경 준비 완료');
   if(kind==='restReady')action=btn('rest','휴식 30초 시작');
-  if(kind==='survey')action=uploaded?(n===9?btn('finish','최종 설문 확인 · 실험 종료 저장'):btn('stimulus','설문 저장 확인 · 다음 환경 준비 완료')):'<p>참가자가 설문을 저장하면 다음 측정을 진행할 수 있습니다.</p>';
+  if(kind==='survey')action=(uploaded||(p.skippedSurveys||[]).includes(slot))?(n===9?btn('finish','최종 단계 확인 · 실험 종료 저장'):btn('stimulus','설문 처리 확인 · 다음 환경 준비 완료')):'<p>참가자가 설문을 저장하거나 연구원이 건너뛰면 다음 측정으로 진행할 수 있습니다.</p>';
   if(kind==='measurement'||kind==='rest'){
    const seconds=kind==='measurement'&&p.position===-1?60:30;
    action='<p>자동 종료 예정 · '+seconds+'초 측정 / 시작 '+(p.startedAt?esc(new Date(p.startedAt).toLocaleTimeString('ko-KR')):'—')+'</p>'+
@@ -189,6 +189,7 @@ export function installYurifV2({auth,store}){
   if(kind==='sensorError')action='<p role="alert">측정 중 센서 연결이 끊어졌습니다. 재연결 후 해당 구간을 재측정하거나 실험을 중단하세요. 이전 샘플은 삭제하지 않습니다.</p>'+btn('retry','센서 연결 후 해당 구간 재측정')+btn('abort','실험 중단 · 기록 보존');
   if(kind==='aborted')action='<p>이 실험은 중단 상태로 기록되었습니다. 미완료 구간과 측정한 ADC를 보존한 채 저장·종료할 수 있습니다.</p>'+btn('archive-aborted','중단된 기록 저장·종료');
   if(['registered','setup','restReady','survey','measurement','rest'].includes(kind))action+=(action?' ':'')+btn('abort','실험 중단 · 기록 저장·종료');
+  if(['registered','setup','restReady','survey','measurement','rest','sensorError'].includes(kind))action+=(action?' ':'')+btn('skip','현재 구간 건너뛰기');
   if(kind==='completed')action='<p>측정 기록 종료됨. 저장 상태와 세션 기록을 확인하세요.</p>';
   const last=(kind==='setup'||(kind==='survey'&&uploaded&&n<9))?'다음 환경: '+esc(plan.order[n+1]?.name||''):(kind==='restReady'?'지금 시작할 구간: '+esc(plan.order[n]?.name||'')+' 이후 30초 휴식':n>=0?'현재 환경: '+esc(plan.order[n]?.name||''):'초기 안정 상태');
   const consentStatus=state.consent?.agreed===true?'서버 동의 확인됨':state.consent?.agreed===false?'연구 참여 비동의':'서버 동의 확인 전';
@@ -228,8 +229,8 @@ export function installYurifV2({auth,store}){
   if(kind==='stimulus'&& !['setup','survey'].includes(p.phase))throw Error('다음 환경을 시작할 수 없는 상태입니다.');
   if(kind==='stimulus'&&p.phase==='survey'){
    const slot=P().surveySlot(p.position);
-   if(!slot||!state.answers.has(slot))throw Error('참가자의 설문 제출이 확인되지 않았습니다.');
-   await getDocFromServer(refAnswer(plan.accessKey,slot)).then(s=>{if(!s.exists())throw Error('설문 서버 확인 실패')});
+   if(!slot||(!state.answers.has(slot)&&!(p.skippedSurveys||[]).includes(slot)))throw Error('설문 제출 또는 건너뛰기 처리가 확인되지 않았습니다.');
+   if(!(p.skippedSurveys||[]).includes(slot))await getDocFromServer(refAnswer(plan.accessKey,slot)).then(s=>{if(!s.exists())throw Error('설문 서버 확인 실패')});
   }
   if(kind==='baseline'){
    const consent=await getDocFromServer(refConsent(plan.accessKey));
@@ -271,6 +272,60 @@ export function installYurifV2({auth,store}){
   if(saved){state.warning='중단된 '+plan.code+' 실험의 로컬 기록을 아카이브에 보존했습니다. Firebase 원시값은 별도로 업로드·검증됩니다.';refreshLab();}
   return saved;
  }
+ async function skipCurrent(){
+  const plan=activePlan(),p=state.progress;
+  if(!plan||!p)throw Error('선택된 실험이 없습니다.');
+  if(state.transitioning)throw Error('진행 상태를 변경하는 중입니다.');
+  const phase=p.phase,position=p.position,slot=P().surveySlot(position);
+  if(!['registered','setup','restReady','survey','measurement','rest','sensorError'].includes(phase))throw Error('현재 단계는 건너뛸 수 없습니다.');
+  const currentKind=phase==='sensorError'?p.failedPhase:phase;
+  const nextPosition=phase==='setup'?position+1:position;
+  if(nextPosition>9)throw Error('마지막 환경까지 처리했습니다.');
+  const skipped=[],surveySkipped=[];
+  let nextPhase='',segment=p.segment??0;
+  if(phase==='registered'){
+   const consent=await getDocFromServer(refConsent(plan.accessKey));
+   const presence=await getDocFromServer(refPresence(plan.accessKey));
+   if(!consent.exists()||consent.data().agreed!==true||!presence.exists()||presence.data().ready!==true||presence.data().uid!==consent.data().uid)
+    throw Error('최초 구간을 건너뛰기 전에도 참가자의 동의 및 준비 확인이 필요합니다.');
+   await window.yurifV2PrepareLab?.(plan,P().makeSegments(plan.order));
+   skipped.push(0);nextPhase='setup';segment=0;
+  }else if(phase==='setup'){
+   skipped.push(1+2*nextPosition);segment=1+2*nextPosition;nextPhase='restReady';
+  }else if(phase==='restReady'||currentKind==='rest'){
+   skipped.push(2+2*position);segment=2+2*position;
+   nextPhase=slot?'survey':'setup';
+  }else if(currentKind==='measurement'){
+   const ix=position===-1?0:1+2*position;
+   skipped.push(ix);segment=ix;nextPhase=position===-1?'setup':'restReady';
+  }else if(phase==='survey'){
+   if(!slot)throw Error('건너뛸 설문이 없습니다.');
+   surveySkipped.push(slot);nextPhase=position===9?'completed':'setup';
+  }else throw Error('현재 구간 건너뛰기 조건이 올바르지 않습니다.');
+  const label=surveySkipped.length?'설문 '+slot:skipped.map(i=>i===0?'초기 안정':P().makeSegments(plan.order)[i]?.name||'구간').join(', ');
+  if(!confirm(plan.code+' · '+label+'을(를) 건너뛸까요? 해당 구간은 미완료로 남고 기존 ADC 값은 보존됩니다.'))return;
+  const draft=window.yurifV2GetLocalDraft?.();
+  if(draft?.id&&draft.id!==plan.id)throw Error('다른 실험의 로컬 초안이 남아 있어 구간 건너뛰기를 차단했습니다. 해당 초안을 먼저 저장하세요.');
+  if(skipped.length&&draft?.id!==plan.id)throw Error('해당 실험의 로컬 초안이 없습니다. 임의로 구간을 건너뛰지 않습니다.');
+  // The last survey may be skipped, but incomplete data must never be represented as a fully completed experiment.
+  if(nextPhase==='completed'){
+   await transition('aborted',phase,{abortedAt:Date.now(),incomplete:true,
+    skippedSteps:[...(p.skippedSteps||[])],skippedSurveys:[...new Set([...(p.skippedSurveys||[]),...surveySkipped])]});
+   if(draft?.id===plan.id)await archiveInterruptedDraft();
+   state.warning='마지막 설문을 건너뛰어 미완료 실험으로 저장했습니다.';
+   refreshLab();return;
+  }
+  await transition(nextPhase,phase,{
+   position:nextPosition,segment,startedAt:null,endedAt:null,
+   failedAt:null,failedSegment:null,failedPhase:null,
+   skippedSteps:[...new Set([...(p.skippedSteps||[]),...skipped])],
+   skippedSurveys:[...new Set([...(p.skippedSurveys||[]),...surveySkipped])],
+   incomplete:true
+  });
+  if(skipped.length)window.yurifV2SkipLocalSegments?.(plan.id,skipped,'연구원이 건너뛴 구간 · 미완료');
+  state.warning=label+' 건너뜀 · 수집한 원시 ADC 기록은 보존됩니다.';
+  refreshLab();
+ }
  async function retry(){
   const p=state.progress,plan=activePlan();if(!p||p.phase!=='sensorError'||!plan)throw Error('재측정 대기 상태가 아닙니다.');
   if(!window.yurifV2ConnectedSensor?.())throw Error('먼저 Arduino 센서를 다시 연결해 주세요.');
@@ -296,11 +351,13 @@ export function installYurifV2({auth,store}){
  }
  async function finish(){
   const plan=activePlan(),p=state.progress;if(!plan||!p||p.phase!=='survey'||p.position!==9)throw Error('마지막 설문 완료 후 종료할 수 있습니다.');
-  const slot=P().surveySlot(9),confirmed=await getDocFromServer(refAnswer(plan.accessKey,slot));
-  if(!confirmed.exists())throw Error('최종 설문 서버 저장이 확인되지 않았습니다.');
+  const slot=P().surveySlot(9),skipped=(p.skippedSurveys||[]).includes(slot);
+  if(!skipped){const confirmed=await getDocFromServer(refAnswer(plan.accessKey,slot));
+   if(!confirmed.exists())throw Error('최종 설문 서버 저장이 확인되지 않았습니다.');}
+  const incomplete=!!(p.incomplete||(p.skippedSteps||[]).length||(p.skippedSurveys||[]).length||window.yurifV2HasSkippedSteps?.(plan.id));
   const completed=await window.yurifV2FinishLab?.();
   if(!completed)throw Error('ADC 로컬 기록 저장 검증이 완료되지 않았습니다.');
-  await transition('completed','survey',{endedAt:Date.now()});
+  await transition('completed','survey',{endedAt:Date.now(),incomplete});
  }
  setInterval(()=>{endTimed().catch(()=>{});const el=$('v2-countdown'),p=state.progress;
   if(el&&p?.startedAt){const remaining=(p.phase==='measurement'&&p.position===-1?60:30)-Math.floor((Date.now()-p.startedAt)/1000);el.textContent='남은 시간 '+Math.max(0,remaining)+'초';}
@@ -376,7 +433,7 @@ export function installYurifV2({auth,store}){
   button.disabled=true;
   try{
    const action=button.dataset.v2Lab;
-   if(action==='archive-aborted')await archiveInterruptedDraft();else if(action==='finish')await finish();else if(action==='retry')await retry();else if(action==='abort'){
+   if(action==='skip')await skipCurrent();else if(action==='archive-aborted')await archiveInterruptedDraft();else if(action==='finish')await finish();else if(action==='retry')await retry();else if(action==='abort'){
     const plan=activePlan(),phase=state.progress?.phase;
     if(!plan||!['registered','setup','restReady','survey','measurement','rest','sensorError'].includes(phase))throw Error('중단할 수 있는 실험 진행 상태가 아닙니다.');
     if(!confirm(plan.code+' 실험을 중단하고 지금까지 측정한 ADC 기록을 저장·종료할까요? 미완료 구간은 그대로 남습니다.'))return;
@@ -424,7 +481,10 @@ export function installYurifV2({auth,store}){
    root.innerHTML=surveyForm(slot,p.position,state.participantPlan);return;
   }
   if(p.phase==='completed'){
-   root.innerHTML='<section class="panel"><h2>1차 실험이 완료되었습니다.</h2><p>모든 설문 응답과 측정이 종료되었습니다.</p></section>';return;
+   root.innerHTML='<section class="panel"><h2>'+(p.incomplete?'1차 실험이 일부 구간 미완료로 종료되었습니다.':'1차 실험이 완료되었습니다.')+'</h2><p>'+(p.incomplete?'일부 구간 또는 설문을 건너뛰었으며 수집된 자료만 보존되었습니다.':'모든 설문 응답과 측정이 종료되었습니다.')+'</p></section>';return;
+  }
+  if(p.phase==='aborted'){
+   root.innerHTML='<section class="panel"><h2>실험이 중단되었습니다.</h2><p>진행한 구간과 제출된 설문만 보존되었습니다. 연구원의 안내를 기다려 주세요.</p></section>';return;
   }
   root.innerHTML='<section class="panel"><h2>연구원의 안내를 기다려 주세요.</h2><p>현재 진행 상태: '+esc(phaseLabel(p))+'</p>'+
    '<p class="muted">설문은 해당 감각 환경 측정과 30초 휴식이 끝나면 자동으로 표시됩니다.</p></section>';
