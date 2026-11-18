@@ -482,7 +482,7 @@ function labModeName(mode){return mode==='pilot'?'개인 예비실험':mode==='s
 function labDraftView(){
  if(!labDraft)return '<div class="empty">실험을 시작하려면 아래에서 실험 종류를 선택하세요.</div>';
  const d=labDraft,active=d.steps.findIndex(x=>x.startedAt&&!x.endedAt),done=d.steps.filter(x=>x.endedAt).length;
- if(d.v2)return '<section class="panel"><h2>확정 1차 실험 진행 · '+esc(d.code)+'</h2><p class="muted">구간 전환은 위의 확정 실험 진행 패널에서만 합니다. 구형 수동 다음 구간 버튼은 비활성화되어 있습니다.</p><p>시작한 구간 '+d.steps.filter(x=>x.startedAt).length+'/21 · 종료한 구간 '+done+'/21 · ADC '+(d.gsrSamples?.length||d.gsrSampleCountTotal||0)+'개</p>'+(d.startedAt&&!d.endedAt?'<div class="actions"><button type="button" class="btn secondary" data-lab-action="archive-aborted">중단된 실험 기록 저장·종료</button></div><p class="muted">Firebase에서 실제로 중단 처리된 실험만 저장할 수 있습니다. 미완료 구간과 원시 ADC 기록을 그대로 보존합니다.</p>':'')+'</section>';
+ if(d.v2)return '<section class="panel"><h2>확정 1차 실험 진행 · '+esc(d.code)+'</h2><p class="muted">구간 전환은 위의 확정 실험 진행 패널에서만 합니다. 구형 수동 다음 구간 버튼은 비활성화되어 있습니다.</p><p>시작한 구간 '+d.steps.filter(x=>x.startedAt).length+'/21 · 종료한 구간 '+done+'/21 · ADC '+(d.gsrSamples?.length||d.gsrSampleCountTotal||0)+'개</p>'+(d.startedAt&&(!d.endedAt||d.status==='aborted')?'<div class="actions"><button type="button" class="btn secondary" data-lab-action="archive-aborted">중단된 실험 기록 저장·종료</button></div><p class="muted">Firebase에서 실제로 중단 처리된 실험만 저장할 수 있습니다. 미완료 구간과 원시 ADC 기록을 그대로 보존합니다.</p>':'')+'</section>';
  const mode=labModeName(d.mode),running=d.startedAt&&!d.endedAt;
  const table=d.steps.map((s,i)=>'<div class="lab-segment '+(i===active?'lab-segment-active':'')+'"><div class="lab-segment-badge">'+esc(s.label)+'</div><div><strong>'+esc(s.name)+'</strong><small>'+esc(s.envName||'환경 미지정')+' · 목표 '+Number(s.target||0)+'초</small><small>기록 '+labDuration(s.startedAt,s.endedAt)+(s.note?' · '+esc(s.note):'')+'</small></div><div class="lab-segment-state">'+(s.endedAt?'완료':i===active?'진행 중':'대기')+'</div></div>').join('');
  return '<section class="panel"><h2>현재 실험 · '+esc(mode)+'</h2><p class="muted">'+esc(d.code)+' · '+esc(d.date)+' · '+(running?'실험 진행 중':'실험 준비 중')+'</p><div class="lab-timer" id="lab-timer">'+(active<0?'00:00':labDuration(d.steps[active].startedAt))+'</div><p class="muted" id="lab-active-label">'+(active<0?'구간 시작 전':'현재 구간 '+esc(d.steps[active].label)+' · '+esc(d.steps[active].name))+'</p><div class="actions">'+(!running?'<button class="btn" type="button" data-lab-action="start">▶ 실험 시작</button>':active>=0&&active<d.steps.length-1?'<button class="btn" type="button" data-lab-action="next">▶ 다음 구간 표시</button>':'')+(running?'<button class="btn secondary" type="button" data-lab-action="finish">■ 실험 종료·저장</button>':'')+'<button class="btn secondary" type="button" data-lab-action="discard">초안 폐기</button></div><div class="lab-segment-list">'+table+'</div>'+(active>=0?'<div class="field"><label>현재 구간 관찰 메모</label><textarea id="lab-current-note" placeholder="환경 변화, 체감 반응, 특이사항을 자유롭게 기록하세요.">'+esc(d.steps[active].note||'')+'</textarea><button class="btn secondary" type="button" data-lab-action="save-note">메모 저장</button></div>':'')+'<p class="muted">버튼을 누른 시각이 구간 경계로 저장됩니다. 환경 자체를 자동 전환하지는 않으며, Arduino USB 연결 시 해당 구간의 ADC 원시값도 자동으로 기록됩니다.</p></section>';
@@ -600,7 +600,7 @@ window.yurifFindGsrRun=id=>[...(db.pilotRuns||[]),...(db.labRuns||[])].find(x=>x
 
 async function labFinish({interrupted=false}={}){
  if(!labDraft||!labDraft.startedAt)return false;
- if(interrupted&&(!labDraft.v2||labDraft.endedAt))throw Error('저장 가능한 중단 1차 실험 초안이 없습니다.');
+ if(interrupted&&(!labDraft.v2||(labDraft.endedAt&&labDraft.status!=='aborted')))throw Error('저장 가능한 중단 1차 실험 초안이 없습니다.');
  if(interrupted){
   const expected=Number(labDraft.gsrSampleCountTotal||0);
   if(window.yurifSafeAdc){
@@ -614,7 +614,7 @@ async function labFinish({interrupted=false}={}){
   }
  }
  if(!confirm(interrupted?'중단된 실험을 미완료 상태로 저장하고 종료할까요? 수집한 데이터와 미완료 구간은 그대로 보존됩니다.':'현재 구간을 종료하고 실험 기록을 저장할까요?'))return false;
- const t=Date.now();labDraft.endedAt=t;
+ const t=Date.now();labDraft.endedAt=labDraft.endedAt||t;
  if(interrupted){labDraft.status='aborted';labDraft.interrupted=true;}
  const i=labDraft.steps.findIndex(x=>x.startedAt&&!x.endedAt);
  if(i>=0)labDraft.steps[i].endedAt=t;
