@@ -262,14 +262,35 @@ export function installYurifV2({auth,store}){
  window.yurifV2OnSensorLost=()=>handleSensorFailure().catch(err=>{state.warning=String(err.message||err);refreshLab()});
  async function archiveInterruptedDraft(){
   const draft=window.yurifV2GetLocalDraft?.();
-  if(!draft?.id)throw Error('이 브라우저에서 저장할 1차 실험 초안을 찾지 못했습니다. 기존 데이터는 변경하지 않았습니다.');
+  if(!draft?.id)throw Error('이 브라우저에서 저장할 1차 실험 초안이 없습니다. 기존 데이터는 변경하지 않았습니다.');
   const plan=state.list.find(x=>x.id===draft.id);
-  if(!plan)throw Error('현재 로그인한 연구팀에서 해당 초안의 등록 실험을 찾지 못했습니다.');
-  const progress=await getDocFromServer(refProgress(plan.accessKey));
-  if(!progress.exists()||progress.data().phase!=='aborted')
-   throw Error('Firebase에서 해당 실험이 중단 상태인지 확인되지 않았습니다. 진행 중인 실험은 저장·종료하지 않습니다.');
+  if(!plan)throw Error('로컬 초안 '+draft.code+'에 해당하는 등록 실험을 찾지 못했습니다. 다른 참가자의 정보는 변경하지 않았습니다.');
+  // Always target the experiment that owns the local draft, NOT the experiment selected in the upper panel.
+  const snapshot=await getDocFromServer(refProgress(plan.accessKey));
+  if(!snapshot.exists())throw Error('Firebase 실험 상태를 조회할 수 없습니다. 원본 초안을 보존했습니다.');
+  const current=snapshot.data().phase;
+  const active=['registered','measurement','restReady','rest','setup','survey','sensorError'];
+  if(current!=='aborted'&&current!=='completed'&&!active.includes(current))
+   throw Error('인식할 수 없는 Firebase 진행 상태: '+current);
+  // Verify local ADC and create a separate recovery copy before mutating any cloud state.
+  const backup=await window.yurifV2BackupLocalDraft?.(plan.id);
+  if(!backup||backup.id!==plan.id)throw Error('로컬 측정 자료 백업 확인 실패. 아무 데이터도 변경하지 않았습니다.');
+  if(active.includes(current)){
+   if(!confirm(plan.code+'은 Firebase에서 아직 '+phaseLabel(snapshot.data())+' 상태입니다. 이 실험만 중단으로 전환하고 수집한 ADC '+backup.count+'개를 보존할까요?'))return false;
+   await runTransaction(store,async tx=>{
+    const ref=refProgress(plan.accessKey),fresh=await tx.get(ref);
+    if(!fresh.exists()||!active.includes(fresh.data().phase))
+     throw Error('서버 실험 상태가 변경되었습니다. 초안과 ADC 백업은 보존했습니다.');
+    tx.update(ref,{phase:'aborted',abortedAt:Date.now(),updatedAt:serverTimestamp(),incomplete:true});
+   });
+  }else if(current==='completed'){
+   if(!confirm(plan.code+'의 Firebase 실험은 이미 완료 상태입니다. 서버의 완료 기록은 변경하지 않고, 현재 컴퓨터에 남은 미완료 로컬 초안만 별도 중단 기록으로 저장할까요?'))return false;
+  }
   const saved=await window.yurifV2SaveAbortedDraft?.(plan.id);
-  if(saved){state.warning='중단된 '+plan.code+' 실험의 로컬 기록을 아카이브에 보존했습니다. Firebase 원시값은 별도로 업로드·검증됩니다.';refreshLab();}
+  if(saved){
+   state.warning=plan.code+'의 로컬 중단 기록이 아카이브에 저장되었습니다. ADC '+backup.count+'개와 별도 백업을 보존했습니다. Firebase 원시값 업로드는 별도로 확인해 주세요.';
+   refreshLab();
+  }
   return saved;
  }
  async function skipCurrent(){
