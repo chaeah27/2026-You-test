@@ -143,7 +143,7 @@ export function installYurifV2({auth,store}){
  }
  function selectExperiment(id){
   if(state.selected===id)return;
-  state.offProgress?.();state.offConsent?.();state.offPresence?.();state.offAnswers?.();state.selected=id;state.progress=null;state.consent=null;state.presence=null;state.answers=new Map();
+  state.offProgress?.();state.offConsent?.();state.offPresence?.();state.offAnswers?.();state.selected=id;state.progress=null;state.consent=null;state.presence=null;state.answers=new Map();state.warning='';
   const plan=activePlan();
   if(plan){
    state.offConsent=onSnapshot(refConsent(plan.accessKey),snap=>{state.consent=snap.exists()?snap.data():null;refreshLab()},e=>{state.warning='동의 기록 조회 오류: '+e.message;refreshLab()});
@@ -187,7 +187,13 @@ export function installYurifV2({auth,store}){
     '<strong id="v2-countdown">남은 시간 계산 중…</strong>';
   }
   if(kind==='sensorError')action='<p role="alert">측정 중 센서 연결이 끊어졌습니다. 재연결 후 해당 구간을 재측정하거나 실험을 중단하세요. 이전 샘플은 삭제하지 않습니다.</p>'+btn('retry','센서 연결 후 해당 구간 재측정')+btn('abort','실험 중단 · 기록 보존');
-  if(kind==='aborted')action='<p>이 실험은 중단 상태로 기록되었습니다. 미완료 구간과 측정한 ADC를 보존한 채 저장·종료할 수 있습니다.</p>'+btn('archive-aborted','중단된 기록 저장·종료');
+  if(kind==='aborted'){
+   const draft=window.yurifV2GetLocalDraft?.();
+   action='<p>이 실험은 Firebase에서 이미 중단 상태입니다. 서버 기록과 이전 ADC 측정값은 삭제하지 않습니다.</p>'+
+    (draft?.id===plan.id
+     ?btn('archive-aborted','이 실험의 로컬 기록 저장·종료')
+     :'<p class="muted">이 브라우저에는 '+esc(plan.code)+'의 로컬 실험 초안이 없습니다. 중단은 이미 완료됐으며, 다른 실험 초안은 변경하지 않습니다. 서버에 업로드된 ADC는 실험 세션 기록에서 확인하세요.</p>');
+  }
   if(['registered','setup','restReady','survey','measurement','rest'].includes(kind))action+=(action?' ':'')+btn('abort','실험 중단 · 기록 저장·종료');
   if(['registered','setup','restReady','survey','measurement','rest','sensorError'].includes(kind))action+=(action?' ':'')+btn('skip','현재 구간 건너뛰기');
   if(kind==='completed')action='<p>측정 기록 종료됨. 저장 상태와 세션 기록을 확인하세요.</p>';
@@ -260,8 +266,17 @@ export function installYurifV2({auth,store}){
   catch(err){state.warning='센서 오류 상태 서버 동기화 실패: '+String(err.message||err)}
  }
  window.yurifV2OnSensorLost=()=>handleSensorFailure().catch(err=>{state.warning=String(err.message||err);refreshLab()});
- async function archiveInterruptedDraft(){
+ async function archiveInterruptedDraft(targetId=null){
   const draft=window.yurifV2GetLocalDraft?.();
+  if(targetId&&draft?.id!==targetId){
+   const selected=state.list.find(x=>x.id===targetId);
+   if(!selected)throw Error('선택한 실험의 등록 정보를 찾지 못했습니다.');
+   const server=await getDocFromServer(refProgress(selected.accessKey));
+   if(!server.exists()||server.data().phase!=='aborted')throw Error('선택한 실험의 Firebase 중단 상태가 확인되지 않았습니다.');
+   state.warning=selected.code+'은 이미 중단되었습니다. 이 브라우저에는 해당 실험의 로컬 초안이 없으므로 다른 실험 초안이나 ADC 원본은 변경하지 않았습니다.';
+   refreshLab();
+   return true;
+  }
   if(!draft?.id)throw Error('이 브라우저에서 저장할 1차 실험 초안이 없습니다. 기존 데이터는 변경하지 않았습니다.');
   const plan=state.list.find(x=>x.id===draft.id);
   if(!plan)throw Error('로컬 초안 '+draft.code+'에 해당하는 등록 실험을 찾지 못했습니다. 다른 참가자의 정보는 변경하지 않았습니다.');
@@ -455,7 +470,7 @@ export function installYurifV2({auth,store}){
   button.disabled=true;
   try{
    const action=button.dataset.v2Lab;
-   if(action==='skip')await skipCurrent();else if(action==='archive-aborted')await archiveInterruptedDraft();else if(action==='finish')await finish();else if(action==='retry')await retry();else if(action==='abort'){
+   if(action==='skip')await skipCurrent();else if(action==='archive-aborted')await archiveInterruptedDraft(activePlan()?.id);else if(action==='finish')await finish();else if(action==='retry')await retry();else if(action==='abort'){
     const plan=activePlan(),phase=state.progress?.phase;
     if(!plan||!['registered','setup','restReady','survey','measurement','rest','sensorError'].includes(phase))throw Error('중단할 수 있는 실험 진행 상태가 아닙니다.');
     if(!confirm(plan.code+' 실험을 중단하고 지금까지 측정한 ADC 기록을 저장·종료할까요? 미완료 구간은 그대로 남습니다.'))return;
