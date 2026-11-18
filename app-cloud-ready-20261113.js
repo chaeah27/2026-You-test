@@ -90,14 +90,14 @@ function researchNotePanel(kind,title){
 }
 function protocol(){
  const t=window.yurifV2Protocol?.makeSegments;
- const summary='1차 실험은 초기 안정 상태 60초, 시각 4개·후각 4개·청각 2개 환경을 각각 60초씩 측정하고, 각 환경 뒤 휴식 30초를 측정합니다. 총 21개 정식 구간 16분이며 환경 준비·설문 시간은 별도입니다.';
+ const summary='1차 실험은 초기 안정 상태 60초, 시각 4개·후각 4개·청각 2개 환경을 각각 30초씩 측정하고, 각 환경 뒤 휴식 30초를 측정합니다. 총 21개 정식 구간 11분이며 환경 준비·설문 시간은 별도입니다.';
  return head('실험 설계·프로토콜','확정 1차 실험의 내용과 예비실험에서 정할 값을 구분해 관리합니다.','01 / EXPERIMENT DESIGN')+
  '<section class="panel"><h2>현재 확정된 1차 실험</h2><p>'+esc(summary)+'</p>'+
  '<div class="cards"><div class="card"><span class="tag">VISUAL · 4</span><h3>시각</h3><p>어둡고 차가움 / 밝고 차가움 / 어둡고 따뜻함 / 밝고 따뜻함</p><p>정확한 lx·K는 예비실험에서 결정합니다.</p></div>'+
- '<div class="card"><span class="tag">OLFACTORY · 4</span><h3>후각</h3><p>향수 4종을 시향지 거치대에 고정하고 60초 동안 일정 거리에서 연속 제시합니다.</p></div>'+
+ '<div class="card"><span class="tag">OLFACTORY · 4</span><h3>후각</h3><p>향수 4종을 시향지 거치대에 고정하고 30초 동안 일정 거리에서 연속 제시합니다.</p></div>'+
  '<div class="card"><span class="tag">AUDITORY · 2</span><h3>청각</h3><p>룩스 중앙홀 소리와 자습실 소리. 평균 음량을 비슷하게 맞추되 변화 특성은 구별해 기록합니다.</p></div></div>'+
  '<p>감각 분야 순서는 <strong>시각 → 후각 → 청각</strong>으로 고정합니다. 분야 내 제시 순서는 등록할 때 참가자별로 셔플하여 변경하지 않습니다.</p>'+
- '<p>센서 적응(시간은 예비실험에서 확정) → 초기 안정 60초 → 감각 환경 60초 → 연구원이 시작하는 휴식 30초 → 해당 시점의 설문 → 다음 환경 준비 확인으로 진행합니다.</p>'+
+ '<p>센서 적응(시간은 예비실험에서 확정) → 초기 안정 60초 → 감각 환경 30초 → 연구원이 시작하는 휴식 30초 → 해당 시점의 설문 → 다음 환경 준비 확인으로 진행합니다.</p>'+
  '<p>설문은 시각 1회(선호 순위·불쾌한 조명 복수 선택), 후각 4회(5단계 정서 평가), 청각 2회(직접 문항 확정 예정)로 총 7회입니다. 휴식 ADC는 기본 분석에서 선택적으로 포함하고, 구간 외 ADC는 보존하되 기본 분석에서 제외합니다.</p>'+
  '<p class="muted">ADC는 보정 전 원시값이며 실제 피부전도도(µS)로 단정하지 않습니다. 심박수는 별도 연속 측정 앱에서 구간별 시각과 대조하여 나중에 입력합니다.</p></section>'+
  sensoryEditor()+
@@ -497,7 +497,7 @@ function labRegisteredPlan(){
  if(plan){
   try{
    const segments=window.yurifV2Protocol.makeSegments(plan.order);
-   details='<p class="muted"><strong>'+esc(plan.code)+'</strong> · 등록된 감각 환경 순서 그대로 적용 · 초기 안정 60초 + 감각 환경 10개 × (노출 60초 + 휴식 30초) = 총 측정 16분 (설문·환경 준비 시간 제외)</p>'+
+   details='<p class="muted"><strong>'+esc(plan.code)+'</strong> · 등록된 감각 환경 순서 그대로 적용 · 초기 안정 60초 + 감각 환경 10개 × (노출 30초 + 휴식 30초) = 총 측정 11분 (설문·환경 준비 시간 제외)</p>'+
     '<div class="lab-segment-list">'+segments.map((step,i)=>{
      const env=step.kind==='stimulus'?step.name:step.kind==='rest'?'휴식 / '+step.name:'초기 안정 상태';
      return '<div class="lab-segment"><div class="lab-segment-badge">'+(i+1)+'</div><div><strong>'+esc(step.name)+'</strong><small>'+esc(env)+' · 목표 '+step.duration+'초</small></div><div class="lab-segment-state">'+(step.kind==='stimulus'?'환경 노출':step.kind==='rest'?'휴식':'안정')+'</div></div>';
