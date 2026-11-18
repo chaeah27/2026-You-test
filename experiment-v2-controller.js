@@ -323,6 +323,7 @@ export function installYurifV2({auth,store}){
    incomplete:true
   });
   if(skipped.length)window.yurifV2SkipLocalSegments?.(plan.id,skipped,'연구원이 건너뛴 구간 · 미완료');
+  window.yurifV2MarkPartial?.(plan.id);
   state.warning=label+' 건너뜀 · 수집한 원시 ADC 기록은 보존됩니다.';
   refreshLab();
  }
@@ -648,7 +649,7 @@ export function installYurifV2({auth,store}){
    const heart=session.heart.get(String(i))||{};
    const rating=pos>=0&&kind==='stimulus'?session.answers.get(P().surveySlot(pos)):null;
    const detail=rating?(rating.rating!=null?String(rating.rating):'순위: '+(rating.ranking||[]).join(' > ')):'';
-   rows.push({kind,category:env?.type||'baseline',environment:step.name,segmentId:i,
+   rows.push({kind,category:env?.type||'baseline',environment:step.name,segmentId:i,status:step.skipped?'건너뜀':step.invalid?'실패/미완료':step.endedAt?'완료':'미측정',
     start:step.startedAt||'',end:step.endedAt||'',samples:values.length,
     adcMean:values.length?(values.reduce((a,b)=>a+b,0)/values.length).toFixed(2):'',
     adcMin:values.length?Math.min(...values):'',adcMax:values.length?Math.max(...values):'',
@@ -668,7 +669,7 @@ export function installYurifV2({auth,store}){
  function drawSessionTable(){
   const root=$('v2-analysis-table');if(!root)return;
   const metrics=[...document.querySelectorAll('.v2-metric:checked')].map(x=>x.value);
-  const headers=[['environment','환경 / 구간'],['kind','구간 유형'],['samples','ADC 샘플 수'],...measurements.filter(([id])=>metrics.includes(id))];
+  const headers=[['environment','환경 / 구간'],['kind','구간 유형'],['status','측정 처리'],['samples','ADC 샘플 수'],...measurements.filter(([id])=>metrics.includes(id))];
   const rows=analysisRows();
   root.innerHTML='<div style="overflow-x:auto"><canvas id="v2-summary-chart" role="img" aria-label="선택한 ADC와 심박수의 구간별 비교 그래프" style="width:100%;min-height:300px"></canvas></div>'+ 
     '<div class="tablewrap"><table><thead><tr>'+headers.map(x=>'<th>'+esc(x[1])+'</th>').join('')+'</tr></thead><tbody>'+
