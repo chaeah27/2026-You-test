@@ -617,7 +617,10 @@ async function labFinish({interrupted=false}={}){
  const t=Date.now();labDraft.endedAt=labDraft.endedAt||t;
  if(interrupted){labDraft.status='aborted';labDraft.interrupted=true;}
  const i=labDraft.steps.findIndex(x=>x.startedAt&&!x.endedAt);
- if(i>=0)labDraft.steps[i].endedAt=t;
+ if(i>=0){
+  if(interrupted){labDraft.steps[i].invalid=true;labDraft.steps[i].errorReason='실험 중단 · 미완료 구간';}
+  labDraft.steps[i].endedAt=t;
+ }
  const finished=labDraft;
  const samples=Array.isArray(finished.gsrSamples)?finished.gsrSamples:[];
  // Commit pending independent ADC journal samples before declaring an experiment finished.
