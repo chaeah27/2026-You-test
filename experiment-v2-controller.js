@@ -1,4 +1,4 @@
-import {collection,doc,getDoc,getDocFromServer,onSnapshot,writeBatch,serverTimestamp,runTransaction,setDoc,query,where} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
+import {collection,doc,getDoc,getDocFromServer,getDocs,onSnapshot,writeBatch,serverTimestamp,runTransaction,setDoc,query,where} from 'https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js';
 /* v2 experiment registration and researcher/participant synchronized state.
    Only used in the isolated development branch until device tests and rules rollout. */
 export function installYurifV2({auth,store}){
