@@ -187,6 +187,7 @@ export function installYurifV2({auth,store}){
     '<strong id="v2-countdown">남은 시간 계산 중…</strong>';
   }
   if(kind==='sensorError')action='<p role="alert">측정 중 센서 연결이 끊어졌습니다. 재연결 후 해당 구간을 재측정하거나 실험을 중단하세요. 이전 샘플은 삭제하지 않습니다.</p>'+btn('retry','센서 연결 후 해당 구간 재측정')+btn('abort','실험 중단 · 기록 보존');
+  if(kind==='aborted')action='<p>이 실험은 중단 상태로 기록되었습니다. 미완료 구간과 측정한 ADC를 보존한 채 저장·종료할 수 있습니다.</p>'+btn('archive-aborted','중단된 기록 저장·종료');
   if(kind==='completed')action='<p>측정 기록 종료됨. 저장 상태와 세션 기록을 확인하세요.</p>';
   const last=(kind==='setup'||(kind==='survey'&&uploaded&&n<9))?'다음 환경: '+esc(plan.order[n+1]?.name||''):(kind==='restReady'?'지금 시작할 구간: '+esc(plan.order[n]?.name||'')+' 이후 30초 휴식':n>=0?'현재 환경: '+esc(plan.order[n]?.name||''):'초기 안정 상태');
   const consentStatus=state.consent?.agreed===true?'서버 동의 확인됨':state.consent?.agreed===false?'연구 참여 비동의':'서버 동의 확인 전';
@@ -257,6 +258,18 @@ export function installYurifV2({auth,store}){
   catch(err){state.warning='센서 오류 상태 서버 동기화 실패: '+String(err.message||err)}
  }
  window.yurifV2OnSensorLost=()=>handleSensorFailure().catch(err=>{state.warning=String(err.message||err);refreshLab()});
+ async function archiveInterruptedDraft(){
+  const draft=window.yurifV2GetLocalDraft?.();
+  if(!draft?.id)throw Error('이 브라우저에서 저장할 1차 실험 초안을 찾지 못했습니다. 기존 데이터는 변경하지 않았습니다.');
+  const plan=state.list.find(x=>x.id===draft.id);
+  if(!plan)throw Error('현재 로그인한 연구팀에서 해당 초안의 등록 실험을 찾지 못했습니다.');
+  const progress=await getDocFromServer(refProgress(plan.accessKey));
+  if(!progress.exists()||progress.data().phase!=='aborted')
+   throw Error('Firebase에서 해당 실험이 중단 상태인지 확인되지 않았습니다. 진행 중인 실험은 저장·종료하지 않습니다.');
+  const saved=await window.yurifV2SaveAbortedDraft?.(plan.id);
+  if(saved){state.warning='중단된 '+plan.code+' 실험의 로컬 기록을 아카이브에 보존했습니다. Firebase 원시값은 별도로 업로드·검증됩니다.';refreshLab();}
+  return saved;
+ }
  async function retry(){
   const p=state.progress,plan=activePlan();if(!p||p.phase!=='sensorError'||!plan)throw Error('재측정 대기 상태가 아닙니다.');
   if(!window.yurifV2ConnectedSensor?.())throw Error('먼저 Arduino 센서를 다시 연결해 주세요.');
@@ -362,7 +375,11 @@ export function installYurifV2({auth,store}){
   button.disabled=true;
   try{
    const action=button.dataset.v2Lab;
-   if(action==='finish')await finish();else if(action==='retry')await retry();else if(action==='abort')await transition('aborted','sensorError',{abortedAt:Date.now()});else await beginStep(action);
+   if(action==='archive-aborted')await archiveInterruptedDraft();else if(action==='finish')await finish();else if(action==='retry')await retry();else if(action==='abort'){
+    await transition('aborted','sensorError',{abortedAt:Date.now()});
+    const draft=window.yurifV2GetLocalDraft?.();
+    if(draft?.id===activePlan()?.id)await archiveInterruptedDraft();
+   }else await beginStep(action);
   }catch(err){state.warning=String(err.message||err);alert('진행 불가: '+state.warning);refreshLab()}
   finally{button.disabled=false}
  });
@@ -670,5 +687,5 @@ export function installYurifV2({auth,store}){
   finally{btn.disabled=false}
  });
 
- window.yurifV2={activateResearch,deactivateResearch,registrationHtml,labHtml,sessionHtml,renderParticipant,stopParticipant,state,selectExperiment};
+ window.yurifV2={activateResearch,deactivateResearch,registrationHtml,labHtml,sessionHtml,renderParticipant,stopParticipant,state,selectExperiment,archiveInterruptedDraft};
 }
